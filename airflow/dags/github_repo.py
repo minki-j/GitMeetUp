@@ -17,7 +17,7 @@ from pendulum import datetime
 )
 def fetch_repositories():
     @task(outlets=[Dataset("github_repositories")])
-    def get_repositories(**context) -> list[dict]:
+    def get_accounts(**context) -> list[dict]:
         print("==> get_repositories")
         """
         This task uses the requests library to retrieve a list of Github repositories
@@ -25,21 +25,21 @@ def fetch_repositories():
         so they can be used in a downstream pipeline. The task returns a list
         of Github repositories to be used in the next task.
         """
-        repos = context.xcom_pull(task_ids="fetch_accounts", key="github_accounts")
-        print(f"==>> repos: {repos}")
-        return repos
+        accounts = context.xcom_pull(task_ids="fetch_accounts", key="github_accounts")
+        print(f"==>> accounts: {accounts}")
+        return accounts
 
     @task
-    def print_repositories(repositories: list[dict]) -> None:
+    def print_repositories(accounts: list[dict]) -> None:
         """
         This task prints the name of each Github repository in the list of repositories
         from the previous task.
         """
         print("%" * 30)
-        for repository in repositories:
-            print(repository["name"])
+        for account in accounts:
+            print(account["login"])
         print("%" * 30)
 
-    print_repositories.expand(repositories=get_repositories())
+    print_repositories.expand(accounts=get_accounts())
 
 fetch_repositories()

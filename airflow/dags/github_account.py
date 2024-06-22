@@ -37,17 +37,16 @@ def fetch_accounts():
         return accounts
 
     @task
-    def print_accounts(accounts: list[dict]) -> None:
+    def print_accounts(account: dict) -> None:
         """
         This task prints the name of each Github account in the list of accounts
         from the previous task.
         """
         print("%" * 30)
-        for account in accounts:
-            print(account["login"])
+        print(account["login"])
         print("%" * 30)
 
-    print_accounts.expand(accounts=get_accounts())
+    print_accounts.expand(account=get_accounts())
 
 
 fetch_accounts()
