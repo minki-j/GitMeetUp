@@ -2,3 +2,4 @@
 
 modal
 apache-airflow-providers-github==2.6.1
+apache-airflow-providers-postgres==5.10.0

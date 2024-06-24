@@ -1,7 +1,9 @@
 import os
 import time
 import requests
+from datetime import datetime
 from urllib.parse import urlparse, parse_qs
+
 
 def get_page_num(url):
     query_string = urlparse(url).query
@@ -10,7 +12,8 @@ def get_page_num(url):
 
 
 def fetch_github_acocunts_by_date_location(location, date):
-    print("==> fetch_github_acocunts_by_date_location")
+    # print("==> fetch_github_acocunts_by_date_location")
+    # print(f"    date: {date}")
     token = os.getenv("GITHUB_TOKEN")
     if not token:
         raise ValueError("Github token is not set")
@@ -55,10 +58,18 @@ def fetch_github_acocunts_by_date_location(location, date):
             next_url = response.links.get("next", {}).get("url")
         else:
             print(f"Failed to fetch repositories: {response.status_code}")
-            print(response)
-            print("Waiting for 60 seconds")
-            time.sleep(60)
+            break
 
         log.append(log_for_date)
-           
-    return (users, log, response.headers.get("X-RateLimit-Remaining"))
+
+    reached_rate_limit = int(response.headers.get("X-RateLimit-Remaining")) < 1
+    rate_limit_reset_time = datetime.fromtimestamp(
+        int(response.headers.get("X-RateLimit-reset"))
+    )
+
+    return (
+        users,
+        log,
+        reached_rate_limit,
+        rate_limit_reset_time,
+    )

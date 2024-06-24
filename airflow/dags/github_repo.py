@@ -2,13 +2,14 @@
 ### Github Repo DAG
 This DAG is used to scrape repositories from Github acocunts. The DAG is scheduled to run whenever the `github_accounts` dataset is updated.
 """
+
 from airflow import Dataset
 from airflow.decorators import dag, task
 from pendulum import datetime
 
 
 @dag(
-    schedule=[Dataset("github_accounts")],
+    schedule="@once",
     start_date=datetime(2024, 1, 1),
     catchup=False,
     doc_md=__doc__,
@@ -25,7 +26,13 @@ def fetch_repositories():
         so they can be used in a downstream pipeline. The task returns a list
         of Github repositories to be used in the next task.
         """
-        accounts = context.xcom_pull(task_ids="fetch_accounts", key="github_accounts")
+        accounts = context["ti"].xcom_pull(
+            dag_id="fetch_accounts",
+            task_ids="get_accounts",
+            key="accounts",
+            include_prior_dates=True,
+        )
+
         print(f"==>> accounts: {accounts}")
         return accounts
 
@@ -40,6 +47,7 @@ def fetch_repositories():
             print(account["login"])
         print("%" * 30)
 
-    print_repositories.expand(accounts=get_accounts())
+    print_repositories(accounts=get_accounts())
+
 
 fetch_repositories()
