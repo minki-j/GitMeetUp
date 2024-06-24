@@ -57,15 +57,14 @@ def fetch_github_acocunts_by_date_location(location, date):
                     log_for_date["messages"].append(f"NO USER in: {next_url}")
             next_url = response.links.get("next", {}).get("url")
         else:
-            print(f"Failed to fetch repositories: {response.status_code}")
+            print(f"Failed to fetch {next_url}: {response.status_code}")
+            print(response.links.get("next", {}).get("url"))
             break
 
         log.append(log_for_date)
 
     reached_rate_limit = int(response.headers.get("X-RateLimit-Remaining")) < 1
-    rate_limit_reset_time = datetime.fromtimestamp(
-        int(response.headers.get("X-RateLimit-reset"))
-    )
+    rate_limit_reset_time = int(response.headers.get("X-RateLimit-reset"))
 
     return (
         users,
