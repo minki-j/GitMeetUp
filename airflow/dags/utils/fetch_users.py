@@ -21,9 +21,8 @@ def fetch_github_acocunts_by_date_location(location, date):
     base_url = "https://api.github.com/search/users?"
 
     users = []
-    log = []
+    overflowed_date = []
 
-    log_for_date = {"date": date, "messages": [], "overflow": False}
     next_url = "first_page"
     while True:
         if next_url is not None and next_url != "first_page":
@@ -43,32 +42,32 @@ def fetch_github_acocunts_by_date_location(location, date):
             last_url = response.links.get("last", {}).get("url")
             last_page_num = get_page_num(last_url)
             if last_page_num == 10:
-                log_for_date["overflow"] = True
+                overflowed_date.append(date)
         else:
             break
 
         if response.status_code == 200:
             users = response.json()["items"]
+            # add fetched_date_range key and value for each user
+            for user in users:
+                user["fetched_date_range"] = date
             if users:
                 users.extend(users)
-                log_for_date["messages"].append(f"{len(users)} total user added")
             else:
                 if next_url != "first_page":
-                    log_for_date["messages"].append(f"NO USER in: {next_url}")
+                    print(f"NO USER in date {date}. URL:{next_url}")
             next_url = response.links.get("next", {}).get("url")
         else:
             print(f"Failed to fetch {next_url}: {response.status_code}")
             print(response.links.get("next", {}).get("url"))
             break
 
-        log.append(log_for_date)
-
     reached_rate_limit = int(response.headers.get("X-RateLimit-Remaining")) < 1
     rate_limit_reset_time = int(response.headers.get("X-RateLimit-reset"))
 
     return (
         users,
-        log,
+        overflowed_date,
         reached_rate_limit,
         rate_limit_reset_time,
     )
