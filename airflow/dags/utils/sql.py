@@ -1,4 +1,5 @@
 import logging
+from dags.utils.github_user_schema import GITHUB_USER_SCHEMA
 
 
 def convert_to_sql_data_type(val_type):
@@ -25,12 +26,11 @@ def get_existing_columns(cursor, table_name):
 
 
 def add_new_columns(cursor, table_name: str, example: dict):
-    for column, value in example.items():
-        data_type = convert_to_sql_data_type(type(value))
+    for column, type in example.items():
         try:
-            cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column} {data_type}")
+            cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column} {type}")
             logging.info(
-                f"Added new column '{column}' with type '{data_type}' to table '{table_name}'."
+                f"Added new column '{column}' with type '{type}' to table '{table_name}'."
             )
         except Exception as e:
             logging.error(f"Error adding column '{column}': {e}")
@@ -102,7 +102,6 @@ def select_data_with_condition(
     cursor, table_name: str, select_condition, where_condition: str
 ):
     query = f"SELECT {select_condition} FROM {table_name} WHERE {where_condition};"
-    print(f"==>> query: {query}")
     try:
         cursor.execute(query)
     except Exception as e:
@@ -115,7 +114,12 @@ def update_table_single_row(cursor, table_name: str, condition: str, update: dic
     existing_cols = get_existing_columns(cursor, table_name)
     for key in update.keys():
         if key not in existing_cols:
-            add_new_columns(cursor, table_name, {key: update[key]})
+            new_column = {key: convert_to_sql_data_type(GITHUB_USER_SCHEMA[key])}
+            add_new_columns(
+                cursor,
+                table_name,
+                new_column,
+            )
 
     update_str = ", ".join([f"{key} = {value}" for key, value in update.items()])
     query = f"""
@@ -134,47 +138,64 @@ def update_table_single_row(cursor, table_name: str, condition: str, update: dic
 
 
 def update_table_multiple_rows(
-    cursor, table_name: str, data: list[dict], identifier: str
+    cursor,
+    table_name: str,
+    existing_columns: list[str],
+    data: list[dict],
+    identifier: str,
 ):
-    print("data[0][hireable]: ", data[0]["hireable"])
     # Extract the columns to be updated
     if not data or len(data) == 0:
         logging.warning("data is empty. No table created or updated.")
         return
-    columns = [key for row in data for key in row.keys() if key != identifier]
 
-    existing_cols = get_existing_columns(cursor, table_name)
-    new_columns = [column for column in columns if column not in existing_cols]
-    example_new_columns = {column: convert_to_sql_data_type(type(data[0].get(column, None))) for column in new_columns}
+    columns = [key for key in data[0].keys() if key != identifier]
+
+    new_columns = [column for column in columns if column not in existing_columns]
+
+    example_new_columns = {}
+
+    for column in new_columns:
+        example_new_columns[column] = convert_to_sql_data_type(
+            GITHUB_USER_SCHEMA[column]
+        )
+
     add_new_columns(cursor, table_name, example_new_columns)
 
     # Start building the SQL query
     sql_set_clauses = []
+    parameters = []  # List to hold parameters for the query
     for column in columns:
-        case_statements = [
-            f"WHEN {identifier} = {row[identifier]} THEN {repr(row[column]) if row[column] else 'NULL'}"
-            for row in data
-            if column in row
-        ] + [f"ELSE {column}"]
+        case_statements = []
+        for row in data:
+            if column in row:
+                parameters.append(row[identifier])
+                if row[column] is not None:
+                    parameters.append(row[column])
+                    case_statements.append(f"WHEN {identifier} = %s THEN %s")
+                else:
+                    case_statements.append(f"WHEN {identifier} = %s THEN NULL")
+        case_statements.append(f"ELSE {column}")
         case_clause = f"{column} = CASE \n" + "\n".join(case_statements) + "\nEND"
         sql_set_clauses.append(case_clause)
     sql_set_clauses_str = ", \n".join(sql_set_clauses)
 
-    ids = ", ".join([repr(row[identifier]) for row in data])
+    # Handling identifiers for the IN clause
+    ids_placeholders = ", ".join(["%s"] * len(data))
+    parameters.extend([row[identifier] for row in data])
 
     query = f"""
 UPDATE {table_name}
 SET {sql_set_clauses_str}
-WHERE {identifier} IN ({ids})
+WHERE {identifier} IN ({ids_placeholders})
     """
 
-    print("==>> query: ", query)
+    # Execute the query with parameters
+    try:
+        cursor.execute(query, parameters)
+    except Exception as e:
+        print(e)
+        print(f"Failed to execute query: {query}")
+        return None
 
-    # try:
-    cursor.execute(query)
-    # except Exception as e:
-    #     print(e)
-    #     print(f"Failed to execute query: {query}")
-    #     return None
-
-    return 
+    return

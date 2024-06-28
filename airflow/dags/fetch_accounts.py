@@ -7,6 +7,7 @@ This DAG is used to scrape and filter github accounts and repositories. The DAG 
 import os
 import time
 import requests
+from typing import List
 from psycopg2 import sql
 from pendulum import datetime, now
 
@@ -20,6 +21,7 @@ from airflow.operators.python import PythonOperator
 from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 from airflow.providers.postgres.operators.postgres import PostgresOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
+from airflow.providers.github.operators.github import GithubOperator
 
 from dags.utils.fetch_users import fetch_github_acocunts_by_date_location
 from dags.utils.date_utils import generate_date_intervals
@@ -31,10 +33,29 @@ from dags.utils.sql import create_or_update_table, insert_data
     schedule="@once",
     catchup=False,
     doc_md=__doc__,
-    default_args={"owner": "Minki", "retries": 0},
+    default_args={"owner": "Minki"},
     tags=["github"],
 )
 def fetch_accounts_dag(location="montreal"):
+
+    # TODO: Save date intervals into postgres rather than keep tracking next_query_date_idx in Variable
+    # @task()
+    # def get_date_intervals() -> List[str]:
+    #     return generate_date_intervals(interval_days=30)
+
+    # TODO: use operators if possible to simplify the code
+    # get_users = GithubOperator(
+    #     github_conn_id="github_default",
+    #     github_method="get_users",
+    #     github_method_args={
+    #         "q": f"location:{location} created:{date}",
+    #         "page": 1,
+    #         "per_page": 100,
+    #         "sort": "joined",
+    #         "order": "desc",
+    #     },
+    #     result_processor="None",
+    # )
 
     @task(outlets=[Dataset("github_accounts")])
     def fetch_accounts(location, **context):
@@ -47,6 +68,7 @@ def fetch_accounts_dag(location="montreal"):
         """
         Variable.set(f"is_query_for_{location}_done", False)
 
+        # TODO: save date intervals into postgres with is_fetched_in_{location} column
         # location = "montreal"
         dates = generate_date_intervals(interval_days=30)
         accounts = []
@@ -82,7 +104,7 @@ def fetch_accounts_dag(location="montreal"):
                 Variable.set(f"overflowed_date_{location}", overflowed_date_from_var)
 
             if reached_rate_limit:
-                next_query_date_idx = idx + 1
+                next_query_date_idx = idx # Don't add 1 since we might miss some pages from the current date interval
                 Variable.set(f"next_query_date_idx_{location}", next_query_date_idx)
                 break
 
@@ -98,7 +120,7 @@ def fetch_accounts_dag(location="montreal"):
         print(f"collected user: {len(accounts)}")
 
         if len(accounts) > 0:
-            hook = PostgresHook(postgres_conn_id=Variable.get("postgres_conn_id"))
+            hook = PostgresHook(postgres_conn_id=Variable.get("POSTGRES_CONN_ID"))
             connection = hook.get_conn()
 
             with connection.cursor() as cursor:
@@ -117,21 +139,6 @@ def fetch_accounts_dag(location="montreal"):
             connection.close()
 
         return {"rate_limit_reset_time": rate_limit_reset_time}
-
-    @task
-    def fetch_data(
-        table_name="github_accounts",
-    ):
-        hook = PostgresHook(postgres_conn_id=Variable.get("postgres_conn_id"))
-        sql = f"SELECT * FROM {table_name};"
-
-        with hook.get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute(sql)
-                result = cur.fetchall()
-                print(f"==>> result example: {result[:3]}")
-                print(f"==>> length: {len(result)}")
-                return None
 
     @task.branch(task_id="is_query_not_completed")
     def is_query_not_completed(location):
@@ -172,7 +179,6 @@ def fetch_accounts_dag(location="montreal"):
 
     (
         fetch_accounts_instance
-        >> fetch_data()
         >> is_query_not_completed_instance
         >> wait_until_rate_limit_reset_instance
         >> trigger_fetch_accounts_dag
