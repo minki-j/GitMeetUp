@@ -27,10 +27,10 @@ def process_user(id_and_url):
         user_info = response.json()
         return (id_and_url, user_info, rate_limit, reset_time)
     elif response.status_code == 403:
-        print(f"HTTP 403 Error fetching user info: {url}")
+        print(f"Forbidden Error fetching user info: {url}")
         raise HTTPError(f"HTTP 403 Error fetching user info: {url}")
     elif response.status_code == 404:
-        print(f"HTTP 404 Error fetching user info: {url}")
+        print(f"Resource not found Error fetching user info: {url}")
         return (id_and_url, {}, rate_limit, reset_time)
     else:
         print(f"Failed to fetch user info: {response.status_code}")
@@ -61,9 +61,12 @@ def filter_users_in_parallel(account_id_and_urls) -> dict[str, list]:
                 print("Rate limit exceeded.")
                 raise Exception("Rate limit exceeded")
             
-            if len(users) >= 10:
-                print("DEBUG MODE: quit after 10 users are collected.")
-                break
+            if len(users) % 100 == 0:
+                print(f"Processed {len(users)} users.")
+            
+            # if len(users) >= 10:
+            #     print("DEBUG MODE: quit after 10 users are collected.")
+            #     break
 
     except Exception as e:
         print("Error in concurrent executor: ", e)
