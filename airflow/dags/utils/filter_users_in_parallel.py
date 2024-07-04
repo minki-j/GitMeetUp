@@ -2,7 +2,7 @@ import os
 import time
 import requests
 from psycopg2 import sql
-from pendulum import datetime, now
+import pendulum
 from datetime import datetime, timedelta
 import concurrent.futures
 

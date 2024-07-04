@@ -31,4 +31,5 @@ GITHUB_USER_SCHEMA = {
     "following": int,
     "created_at": str,
     "updated_at": str,
+    "last_fetched_at": str,
 }

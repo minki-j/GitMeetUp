@@ -9,7 +9,7 @@ import time
 import requests
 from typing import List
 from psycopg2 import sql
-from pendulum import datetime, now
+import pendulum
 
 from airflow import Dataset
 from airflow.decorators import dag, task
@@ -29,7 +29,7 @@ from dags.utils.sql import create_or_update_table, insert_data
 
 
 @dag(
-    start_date=datetime(2024, 1, 1),
+    start_date=pendulum.datetime(2024, 1, 1, tz="America/Toronto"),
     schedule="@once",
     catchup=False,
     doc_md=__doc__,
@@ -160,13 +160,13 @@ def fetch_accounts_dag(location="montreal"):
             time.sleep(sleep_time + 1)
 
     trigger_fetch_accounts_dag = TriggerDagRunOperator(
-        start_date=datetime(2024, 1, 1),
+        start_date=pendulum.datetime(2024, 1, 1, tz="America/Toronto"),
         task_id="trigger_self_dag",
         trigger_dag_id="fetch_accounts_dag",
     )
 
     trigger_filter_accounts_dag = TriggerDagRunOperator(
-        start_date=datetime(2024, 1, 1),
+        start_date=pendulum.datetime(2024, 1, 1, tz="America/Toronto"),
         task_id="trigger_filter_accounts_dag",
         trigger_dag_id="filter_accounts_dag",
     )

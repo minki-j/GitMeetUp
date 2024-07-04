@@ -1,5 +1,5 @@
 import logging
-from dags.utils.github_user_schema import GITHUB_USER_SCHEMA
+from dags.schemas.github_user_schema import GITHUB_USER_SCHEMA
 
 
 def convert_to_sql_data_type(val_type):
@@ -99,9 +99,9 @@ def insert_data(cursor, data: list[dict], table_name):
 
 
 def select_data_with_condition(
-    cursor, table_name: str, select_condition, where_condition: str
+    cursor, table_name: str, select_condition, where_condition: str, limit: int = None
 ):
-    query = f"SELECT {select_condition} FROM {table_name} WHERE {where_condition};"
+    query = f"SELECT {select_condition} FROM {table_name} {'WHERE ' + where_condition if where_condition else ''} {'LIMIT ' + str(limit) if limit else ''};"
     try:
         cursor.execute(query)
     except Exception as e:

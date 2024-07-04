@@ -1,7 +1,7 @@
 import os
 import time
 from psycopg2 import sql
-from datetime import datetime, timedelta
+import pendulum
 
 
 from airflow import Dataset
@@ -9,9 +9,10 @@ from airflow.decorators import dag, task
 from airflow.models import Variable
 from airflow.models.xcom_arg import XComArg
 from airflow.operators.empty import EmptyOperator
+from airflow.operators.trigger_dagrun import TriggerDagRunOperator
+
 from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
-from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 from airflow.providers.postgres.operators.postgres import PostgresOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 
@@ -25,7 +26,7 @@ from dags.utils.filter_users_in_parallel import filter_users_in_parallel
 
 
 @dag(
-    start_date=datetime(2024, 1, 1),
+    start_date=pendulum.datetime(2024, 1, 1, tz="America/Toronto"),
     schedule="@once",
     catchup=False,
     doc_md=__doc__,
@@ -88,7 +89,6 @@ def filter_accounts_dag(table_name="github_accounts", threshold=14):
         return {"is_finished": is_finished, "reset_time": reset_time}
 
     @task.branch(task_id="is_query_not_completed")
-
     def is_finished():
         is_finished_str = Variable.get(f"is_filter_for_filter_done", "False")
         is_finished = is_finished_str == "True"
@@ -110,7 +110,7 @@ def filter_accounts_dag(table_name="github_accounts", threshold=14):
             time.sleep(sleep_time + 1)
 
     trigger_filter_accounts_dag = TriggerDagRunOperator(
-        start_date=datetime(2024, 1, 1),
+        start_date=pendulum.datetime(2024, 1, 1, tz="America/Toronto"),
         task_id="trigger_self_dag",
         trigger_dag_id="filter_accounts_dag",
     )

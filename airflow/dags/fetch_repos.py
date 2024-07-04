@@ -5,12 +5,12 @@ This DAG is used to scrape repositories from Github acocunts. The DAG is schedul
 
 from airflow import Dataset
 from airflow.decorators import dag, task
-from pendulum import datetime
+import pendulum
 
 
 @dag(
     schedule="@once",
-    start_date=datetime(2024, 1, 1),
+    start_date=pendulum.datetime(2024, 1, 1, tz="America/Toronto"),
     catchup=False,
     doc_md=__doc__,
     default_args={"owner": "Minki", "retries": 2},
