@@ -47,7 +47,7 @@ def fetch_user_full_info_dag():
                 try:
                     cursor.execute(query)
                 except Exception as e:
-                    print(f"Failed to execute query: {query}")
+                    print(f"Failed to execute query: {query} / {e}")
                 account_infos = cursor.fetchall()
             else:
                 account_infos = select_data_with_condition(
@@ -55,7 +55,7 @@ def fetch_user_full_info_dag():
                     table_name="github_accounts",
                     select_condition="id, url, NULL",
                     where_condition=None,
-                    limit=10,
+                    limit=batch_size,
                 )
 
         if len(account_infos) == 0:
@@ -75,7 +75,7 @@ def fetch_user_full_info_dag():
                 updated_user_info["last_fetched_at"] = (
                     pendulum.now().to_datetime_string()
                 )
-                
+
                 # print("rate limit: ", response.headers["X-RateLimit-Remaining"])
                 # print(
                 #     f"reset time(Montreal): {pendulum.from_timestamp(int(response.headers['X-RateLimit-Reset'])).in_tz('America/Montreal')}"
@@ -143,19 +143,6 @@ def fetch_user_full_info_dag():
         print("==>> Filter is not done, continuing the downstream tasks")
         return "trigger_filter_accounts_dag"
 
-    # @task
-    # def wait_until_rate_limit_rest():
-    #     if Variable.get(f"github_api_reset_utc_dt", 0) == 0:
-    #         return
-
-    #     github_api_reset_utc_dt = pendulum.datetime(
-    #         Variable.get(f"github_api_reset_utc_dt", 0), tz="UTC"
-    #     )
-    #     sleep_time = github_api_reset_utc_dt.diff(pendulum.now(tz="UTC")).in_seconds()
-    #     if sleep_time > 0:
-    #         print(f"==>> Sleeping for {int(sleep_time/60)} minutes")
-    #         time.sleep(sleep_time + 1)
-
     trigger_filter_accounts_dag = TriggerDagRunOperator(
         start_date=(
             pendulum.datetime(Variable.get(f"github_api_reset_utc_dt", 0), tz="UTC")
@@ -172,7 +159,7 @@ def fetch_user_full_info_dag():
     fetch_user_url_task = fetch_user_url(fetch_unprocessed_user_urls_task)
     update_db_task = update_db()
     is_finished_task = is_finished()
-    # wait_until_rate_limit_rest_task = wait_until_rate_limit_rest()
+
 
     (
         get_column_names
@@ -180,11 +167,9 @@ def fetch_user_full_info_dag():
         >> fetch_user_url_task
         >> update_db_task
         >> is_finished_task
-        # >> wait_until_rate_limit_rest_task
-        >> trigger_filter_accounts_dag
+        >> [trigger_filter_accounts_dag, end_task]
     )
 
-    is_finished_task >> end_task
 
 
 fetch_user_full_info_dag()

@@ -1,5 +1,5 @@
 import logging
-from dags.schemas.github_user_schema import GITHUB_USER_SCHEMA
+from dags.schemas.github_user_schema import GITHUB_USER_SCHEMA, GITHUB_REPO_SCHEMA
 
 
 def convert_to_sql_data_type(val_type):
@@ -137,6 +137,17 @@ def update_table_single_row(cursor, table_name: str, condition: str, update: dic
     return cursor.fetchall()
 
 
+def does_table_exists(cursor, table_name):
+    query = """
+    SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = %s
+    );
+    """
+    cursor.execute(query, (table_name,))
+    return cursor.fetchone()[0]
+
+
 def update_table_multiple_rows(
     cursor,
     table_name: str,
@@ -144,6 +155,12 @@ def update_table_multiple_rows(
     data: list[dict],
     identifier: str,
 ):
+    print(f"==>> update_table_multiple_rows: total {len(data)}")
+
+    if table_name not in ["github_accounts", "github_repositories"]:
+        logging.error(f"Table name '{table_name}' not supported.")
+        return
+
     # Extract the columns to be updated
     if not data or len(data) == 0:
         logging.warning("data is empty. No table created or updated.")
@@ -158,9 +175,18 @@ def update_table_multiple_rows(
     for column in new_columns:
         example_new_columns[column] = convert_to_sql_data_type(
             GITHUB_USER_SCHEMA[column]
+            if table_name == "github_accounts"
+            else (
+                GITHUB_REPO_SCHEMA[column]
+                if table_name == "github_repositories"
+                else str
+            )
         )
 
-    add_new_columns(cursor, table_name, example_new_columns)
+    if not does_table_exists(cursor, table_name):
+        create_or_update_table(cursor, data, table_name)
+    else:
+        add_new_columns(cursor, table_name, example_new_columns)
 
     # Start building the SQL query
     sql_set_clauses = []
@@ -189,13 +215,13 @@ UPDATE {table_name}
 SET {sql_set_clauses_str}
 WHERE {identifier} IN ({ids_placeholders})
     """
-
-    # Execute the query with parameters
+    cursor.execute(query, parameters)
     try:
         cursor.execute(query, parameters)
     except Exception as e:
-        print(e)
-        print(f"Failed to execute query: {query}")
+        print(f"Failed to execute query")
+        print("Error Message:", e)
+        print("parameters: ", parameters)
         return None
 
     return

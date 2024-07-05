@@ -57,7 +57,7 @@ def fetch_accounts_dag(location="montreal"):
     #     result_processor="None",
     # )
 
-    @task(outlets=[Dataset("github_accounts")])
+    @task()
     def fetch_accounts(location, **context):
         print("==> fetch_accounts")
         """

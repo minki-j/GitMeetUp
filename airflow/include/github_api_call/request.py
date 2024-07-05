@@ -29,3 +29,4 @@ def github_api_request(type, url, last_fetch_at, params):
         return requests.delete(url, headers=headers)
     else:
         raise ValueError(f"Unsupported type: {type}")
+
