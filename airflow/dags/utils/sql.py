@@ -10,7 +10,7 @@ def convert_to_sql_data_type(val_type):
     elif issubclass(val_type, float):
         return "FLOAT"
     else:
-        return "VARCHAR(255)"
+        return "TEXT"
 
 
 def get_existing_columns(cursor, table_name):
@@ -54,7 +54,18 @@ def create_or_update_table(cursor, data: list[dict], table_name: str):
     # otherwise, set the first column as primary key
     primary_key = "id" if "id" in data[0].keys() else data[0].keys()[0]
 
-    create_table_query = f"CREATE TABLE IF NOT EXISTS {table_name} ({column_definitions}, PRIMARY KEY ({primary_key}));"
+    # Deprecated version
+    # create_table_query = f"CREATE TABLE IF NOT EXISTS {table_name} ({column_definitions}, PRIMARY KEY ({primary_key}));"
+
+    #TODO: This query needed to be tested!
+    create_table_query = f"""
+CREATE TABLE IF NOT EXISTS {table_name} (
+    {column_definitions}, 
+    PRIMARY KEY ({primary_key}),
+    FOREIGN KEY (user_id) REFERENCES github_accounts(id)
+);
+"""
+    
     try:
         cursor.execute(create_table_query)
         logging.info(f"Table '{table_name}' created or already exists.")
@@ -77,12 +88,19 @@ def create_or_update_table(cursor, data: list[dict], table_name: str):
 
 
 def insert_data(cursor, data: list[dict], table_name):
+    if len(data) == 0:
+        logging.warning("data is empty. No data inserted.")
+        return
 
     primary_key = "id" if "id" in data[0].keys() else data[0].keys()[0]
 
-    for element in data:
+    for i, element in enumerate(data):
+        if not isinstance(element, dict):
+            logging.error("not dictionary element at ", i, ", ", element)
+            continue
         columns = element.keys()
         values = [element[column] for column in columns]
+
         placeholders = ", ".join(
             ["%s"] * len(values)
         )  # Using %s as placeholder for psycopg2
@@ -95,7 +113,13 @@ def insert_data(cursor, data: list[dict], table_name):
         VALUES ({placeholders})
         ON CONFLICT ({primary_key}) 
         DO UPDATE SET {update_str};"""
-        cursor.execute(insert_query, values)
+
+        try:
+            cursor.execute(insert_query, values)
+        except Exception as e:
+            logging.error(f"Error inserting data: {e}")
+            logging.error(f"Query: {values}")
+            return
 
 
 def select_data_with_condition(

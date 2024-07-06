@@ -86,7 +86,9 @@ def fetch_user_full_info_dag():
                     )
                     Variable.set(
                         "github_api_reset_utc_dt",
-                        pendulum.from_timestamp(response.headers["X-RateLimit-Reset"]),
+                        pendulum.from_timestamp(
+                            int(response.headers["X-RateLimit-Reset"])
+                        ),
                     )
                     break
             elif response.status_code == 304:
@@ -101,7 +103,7 @@ def fetch_user_full_info_dag():
                 )
                 Variable.set(
                     "github_api_reset_utc_dt",
-                    pendulum.from_timestamp(response.headers["X-RateLimit-Reset"]),
+                    pendulum.from_timestamp(int(response.headers["X-RateLimit-Reset"])),
                 )
                 break
             elif response.status_code == 404:
@@ -145,7 +147,11 @@ def fetch_user_full_info_dag():
 
     trigger_filter_accounts_dag = TriggerDagRunOperator(
         start_date=(
-            pendulum.datetime(Variable.get(f"github_api_reset_utc_dt", 0), tz="UTC")
+            pendulum.from_format(
+                Variable.get(f"github_api_reset_utc_dt", 0),
+                fmt="YYYY-MM-DD HH:mm:ssZZ",
+                tz="UTC",
+            )
             if Variable.get(f"github_api_reset_utc_dt", 0) != 0
             else pendulum.datetime(2024, 1, 1, tz="UTC")
         ),
@@ -160,7 +166,6 @@ def fetch_user_full_info_dag():
     update_db_task = update_db()
     is_finished_task = is_finished()
 
-
     (
         get_column_names
         >> fetch_unprocessed_user_urls_task
@@ -169,7 +174,6 @@ def fetch_user_full_info_dag():
         >> is_finished_task
         >> [trigger_filter_accounts_dag, end_task]
     )
-
 
 
 fetch_user_full_info_dag()
