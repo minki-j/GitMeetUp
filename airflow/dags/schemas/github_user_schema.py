@@ -37,7 +37,6 @@ GITHUB_USER_SCHEMA = {
 
 GITHUB_REPO_SCHEMA = {
     "user_id": int,
-    "user_login": str,
     "id": int,
     "node_id": str,
     "name": str,

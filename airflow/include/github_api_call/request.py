@@ -1,8 +1,8 @@
 import os
 import requests
+import pendulum
 
-
-def github_api_request(type, url, last_fetch_at, params):
+def github_api_request(type, url, last_fetch_at, params=None):
 
     token = os.getenv("GITHUB_TOKEN")
     if not token:
@@ -14,19 +14,35 @@ def github_api_request(type, url, last_fetch_at, params):
         headers["if-modified-since"] = last_fetch_at.strftime(
             "%a, %d %b %Y %H:%M:%S GMT"
         )
-        
-    print(f"Requesting {url}")
+
 
     if type == "GET":
-        return requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, params=params)
     elif type == "POST":
-        return requests.post(url, headers=headers, json=params)
+        response = requests.post(url, headers=headers, json=params)
     elif type == "PATCH":
-        return requests.patch(url, headers=headers, json=params)
+        response = requests.patch(url, headers=headers, json=params)
     elif type == "PUT":
-        return requests.put(url, headers=headers, json=params)
+        response = requests.put(url, headers=headers, json=params)
     elif type == "DELETE":
-        return requests.delete(url, headers=headers)
+        response = requests.delete(url, headers=headers)
     else:
         raise ValueError(f"Unsupported type: {type}")
 
+    if response.status_code == 200:
+        print(f"==> 200 OK for {url}")
+    elif response.status_code == 304:
+        print(f"==> 304 Not Modified since the last fetch: {url}")
+    elif response.status_code == 403:
+        print(f"403 Forbidden Error for {url} / Message: {response.text}")
+        print(
+            f"remaining rate limit: {response.headers['X-RateLimit-Remaining']} reset: {pendulum.from_timestamp(int(response.headers['X-RateLimit-Reset'])).in_tz('America/Montreal')}"
+        )
+    elif response.status_code == 404:
+        print(f"Not Found:{url}")
+    else:
+        print(
+            f"{response.status_code} Error for {url} / Message: {response.text}"
+        )
+
+    return response

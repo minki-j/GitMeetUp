@@ -69,55 +69,31 @@ def fetch_user_full_info_dag():
         user_info = []
         index = 0
         for id, url, last_fetched_at in account_infos:
-            response = github_api_request("GET", url, last_fetched_at, {})
-            if response.status_code == 200:
-                updated_user_info = response.json()
-                updated_user_info["last_fetched_at"] = (
-                    pendulum.now().to_datetime_string()
-                )
+            res = github_api_request("GET", url, last_fetched_at)
 
-                # print("rate limit: ", response.headers["X-RateLimit-Remaining"])
-                # print(
-                #     f"reset time(Montreal): {pendulum.from_timestamp(int(response.headers['X-RateLimit-Reset'])).in_tz('America/Montreal')}"
-                # )
-                if response.headers["X-RateLimit-Remaining"] == 0:
-                    print(
-                        f"==> 403 Rate limit exceeded. Reset time: {pendulum.from_timestamp(int(response.headers['X-RateLimit-Reset']))}"
-                    )
-                    Variable.set(
-                        "github_api_reset_utc_dt",
-                        pendulum.from_timestamp(
-                            int(response.headers["X-RateLimit-Reset"])
-                        ),
-                    )
-                    break
-            elif response.status_code == 304:
-                print(f"==> 304 Not Modified since the last fetch: {url}")
-                updated_user_info = {"last_fetched_at": pendulum.now().to_datetime_string(), "id": id}
-            elif response.status_code == 403:
+            if res.status_code == 200:
+                updated_user_info = res.json()
+
+            updated_user_info["id"] = id 
+            updated_user_info["last_fetched_at"] = pendulum.now().to_datetime_string()
+
+            if res.headers["X-RateLimit-Remaining"] == 0:
                 print(
-                    f"403 Error for {url} / Message: {response.text}"
-                )
-                print(
-                    f"remaining rate limit: {response.headers['X-RateLimit-Remaining']} reset: {pendulum.from_timestamp(int(response.headers['X-RateLimit-Reset'])).in_tz('America/Montreal')}"
+                    f"==> 403 Rate limit exceeded. Reset time: {pendulum.from_timestamp(int(res.headers['X-RateLimit-Reset']))}"
                 )
                 Variable.set(
                     "github_api_reset_utc_dt",
-                    pendulum.from_timestamp(int(response.headers["X-RateLimit-Reset"])),
+                    pendulum.from_timestamp(
+                        int(res.headers["X-RateLimit-Reset"])
+                    ),
                 )
                 break
-            elif response.status_code == 404:
-                print(f"Not Found:{url}")
-                updated_user_info = {"last_fetched_at": pendulum.now().to_datetime_string(), "id": id}
-                # TODO: delete these users from db
             else:
-                print(
-                    f"{response.status_code} Error for {url} / Message: {response.text}"
-                )
+                Variable.delete("github_api_reset_utc_dt")
             user_info.append(updated_user_info)
             index += 1
             if index % 50 == 0:
-                print(f"==>> {index} users fetched / rate limit:  {response.headers['X-RateLimit-Remaining']}")
+                print(f"==>> {index} users fetched / rate limit:  {res.headers['X-RateLimit-Remaining']}")
 
         return user_info
 

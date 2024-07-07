@@ -3,6 +3,7 @@ import time
 import requests
 from datetime import datetime
 from urllib.parse import urlparse, parse_qs
+from .request import github_api_request
 
 
 def get_page_num(url):
@@ -11,26 +12,23 @@ def get_page_num(url):
     return params.get("page", [None])[0]
 
 
-def fetch_github_acocunts_by_date_location(location, date):
-    # print("==> fetch_github_acocunts_by_date_location")
-    # print(f"    date: {date}")
-    token = os.getenv("GITHUB_TOKEN")
-    if not token:
-        raise ValueError("Github token is not set")
-    headers = {"Authorization": f"Bearer {token}"}
+def fetch_github_acocunts_by_date_location(location: str, date: str):
     base_url = "https://api.github.com/search/users?"
-
     users = []
     overflowed_date = []
+    print(f"==>> location: {location}")
+    location = location.replace(" ", "%20")
+    print(f"==>> location: {location}")
 
     next_url = "first_page"
     while True:
         if next_url is not None and next_url != "first_page":
-            response = requests.get(next_url, headers=headers)
+            response = github_api_request("GET", next_url, None)
         elif next_url == "first_page":
-            response = requests.get(
+            response = github_api_request(
+                "GET",
                 base_url,
-                headers=headers,
+                None,
                 params={
                     "q": f"location:{location} created:{date}",
                     "page": 1,
@@ -70,4 +68,5 @@ def fetch_github_acocunts_by_date_location(location, date):
         overflowed_date,
         reached_rate_limit,
         rate_limit_reset_time,
+        
     )

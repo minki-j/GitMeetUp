@@ -88,7 +88,7 @@ CREATE TABLE IF NOT EXISTS {table_name} (
 
 
 def insert_data(cursor, data: list[dict], table_name):
-    if len(data) == 0:
+    if not data or len(data) == 0:
         logging.warning("data is empty. No data inserted.")
         return
 
@@ -103,7 +103,7 @@ def insert_data(cursor, data: list[dict], table_name):
 
         placeholders = ", ".join(
             ["%s"] * len(values)
-        )  # Using %s as placeholder for psycopg2
+        ) 
         update_str = ", ".join(
             [f"{col} = EXCLUDED.{col}" for col in columns if col != primary_key]
         )

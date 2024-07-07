@@ -76,81 +76,48 @@ def fetch_repositories_dag():
         result = []
         index = 0
 
-        for id, url in repo_urls:
-            response = github_api_request(
-                "GET", url, None, {}
-            )  # TODO: Add last_fetched_at
-            if response.status_code == 200:
-                repositories = response.json()
-                last_fetched_at = pendulum.now().to_datetime_string()
+        for user_id, url in repo_urls:
+            res = github_api_request("GET", url, None)  # TODO: Add last_fetched_at
+            if res.status_code == 200:
+                repositories = res.json()
+                if len(repositories) == 0:
+                    continue
+
                 for repo in repositories:
                     # remove unnecessary items from the dict repo_info
-                    owner_dict = repo.pop("owner", None)
-                    repo["user_id"] = owner_dict["id"]
-                    repo["user_login"] = owner_dict["login"]
-                    repo["last_fetched_at"] = last_fetched_at
+                    repo.pop("owner", None)
+
                     # remove nested dict items
-                    keys_to_remove = [
+                    nested_items_key = [
                         key for key in repo.keys() if isinstance(repo[key], dict)
                     ]
-                    for key in keys_to_remove:
+                    for key in nested_items_key:
                         value = repo.pop(key)
                         # print("Excluded nested item. Key/value:\n", key, " / ", value)
+            else:
+                repositories = [{}]
 
-                # print("rate limit: ", response.headers["X-RateLimit-Remaining"])
-                # print(
-                #     f"reset time(Montreal): {pendulum.from_timestamp(int(response.headers['X-RateLimit-Reset'])).in_tz('America/Montreal')}"
-                # )
-                if response.headers["X-RateLimit-Remaining"] == 0:
-                    print(
-                        f"==> 403 Rate limit exceeded. Reset time: {pendulum.from_timestamp(int(response.headers['X-RateLimit-Reset']))}"
-                    )
-                    Variable.set(
-                        "github_api_reset_utc_dt",
-                        pendulum.from_timestamp(
-                            int(response.headers["X-RateLimit-Reset"])
-                        ),
-                    )
-                    break
-                else:
-                    Variable.delete("github_api_reset_utc_dt")
-            elif response.status_code == 304:
-                print(f"==> 304 Not Modified since the last fetch: {url}")
-                repositories = [
-                    {
-                        "last_fetched_at": pendulum.now().to_datetime_string(),
-                        "id": id,
-                    }
-                ]
-            elif response.status_code == 403:
-                print(f"403 Error for {url} / Message: {response.text}")
+            for repo in repositories:
+                repo["user_id"] = user_id
+                repo["last_fetched_at"] = pendulum.now().to_datetime_string()
+
+            if res.headers["X-RateLimit-Remaining"] == 0:
                 print(
-                    f"remaining rate limit: {response.headers['X-RateLimit-Remaining']} reset: {pendulum.from_timestamp(int(response.headers['X-RateLimit-Reset'])).in_tz('America/Montreal')}"
+                    f"==> 403 Rate limit exceeded. Reset time: {pendulum.from_timestamp(int(res.headers['X-RateLimit-Reset']))}"
                 )
                 Variable.set(
                     "github_api_reset_utc_dt",
-                    pendulum.from_timestamp(int(response.headers["X-RateLimit-Reset"])),
+                    pendulum.from_timestamp(int(res.headers["X-RateLimit-Reset"])),
                 )
                 break
-            elif response.status_code == 404:
-                print(f"Not Found:{url}")
-                repositories = [
-                    {
-                        "last_fetched_at": pendulum.now().to_datetime_string(),
-                        "id": id,
-                    }
-                ]
-
-                # TODO: delete these users from db
             else:
-                print(
-                    f"{response.status_code} Error for {url} / Message: {response.text}"
-                )
+                Variable.delete("github_api_reset_utc_dt")
+
             result.extend(repositories)
             index += 1
             if index % 50 == 0:
                 print(
-                    f"==>> {index} repo fetched / rate limit:  {response.headers['X-RateLimit-Remaining']}"
+                    f"==>> {index} repo fetched / rate limit:  {res.headers['X-RateLimit-Remaining']}"
                 )
 
         print("Total ", len(result), " repositories fetched")
