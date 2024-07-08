@@ -33,11 +33,10 @@ from dags.utils.sql import create_or_update_table, insert_data
     schedule="@once",
     catchup=False,
     doc_md=__doc__,
-    default_args={"owner": "Minki", "retries": 0},
+    default_args={"owner": "Minki", "retries": 3, "retry_delay": pendulum.duration(seconds=10)},
     tags=["github"],
-    conf={"location": "montreal"},
 )
-def search_users_by_location_dag():
+def search_users_by_location_dag(location: str = "montreal"):
     @task()
     def fetch_users(**context):
         print("==> fetch_users")
@@ -64,6 +63,7 @@ def search_users_by_location_dag():
                 reached_rate_limit,
                 rate_limit_reset_time,
             ) = fetch_github_acocunts_by_date_location(location, date)
+
             if accounts_in_date:
                 accounts.extend(accounts_in_date)
             if len(overflowed_date) > 0:
@@ -71,6 +71,10 @@ def search_users_by_location_dag():
                     f"overflowed_date_{location}", default_var=[]
                 )
                 overflowed_date_from_var.extend(overflowed_date)
+                print(
+                    f"total num of overflowed_date_{location}: ",
+                    len(overflowed_date_from_var),
+                )
                 Variable.set(f"overflowed_date_{location}", overflowed_date_from_var)
             if reached_rate_limit:
                 next_query_date_idx = idx
@@ -80,6 +84,8 @@ def search_users_by_location_dag():
                     pendulum.from_timestamp(rate_limit_reset_time, tz="UTC").to_datetime_string(),
                 )
                 break
+            else:
+                Variable.set(f"github_search_api_reset_utc_dt", 0)
             if idx == len(dates) - 1:
                 Variable.delete(f"next_query_date_idx_{location}")
                 print("==>> All queries are done, setting Variable to True")
@@ -87,7 +93,7 @@ def search_users_by_location_dag():
                 break
 
         print(
-            f"processed {next_query_date_idx - 1} out of {len(dates)} / {dates[next_query_date_idx - 1]}"
+            f"processed {next_query_date_idx - 1} out of {len(dates)} / until {dates[next_query_date_idx - 1]}"
         )
         print(f"collected user: {len(accounts)}")
 

@@ -17,6 +17,7 @@ from dags.utils.sql import (
     insert_data,
 )
 from include.github_api_call.request import github_api_request
+from include.utils.generate_tree import generate_tree
 
 # TODO: languages, description, recent_30_commits, pushed_at, packages_used, directory_structure
 #
@@ -49,46 +50,48 @@ def analyze_repositories_dag():
         hook = PostgresHook(postgres_conn_id=Variable.get("POSTGRES_CONN_ID"))
         connection = hook.get_conn()
         batch_size = 2
-        repo_pushed_at_threshold = pendulum.now().subtract(days=30).to_datetime_string()
+        repo_pushed_at_threshold = pendulum.now().subtract(days=30).timestamp()
+
+        columns = ["id", "trees_url", "commits_url", "languages_url", "description"]
+        columns_str = ", ".join(columns)
 
         with connection.cursor() as cursor:
             if "analyzed_at" not in existing_columns:
-                repo_urls = select_data_with_condition(
+                repo_infos = select_data_with_condition(
                     cursor,
                     table_name="github_repositories",
-                    select_condition="id, trees_url, commits_url, languages_url, description",
-                    where_condition=f"pushed_at > {repo_pushed_at_threshold}",
+                    select_condition=columns_str,
+                    where_condition=f'TO_TIMESTAMP(pushed_at, \'YYYY-MM-DD"T"HH24:MI:SS"Z"\') > TO_TIMESTAMP({repo_pushed_at_threshold})',
                     limit=batch_size,
                 )
             else:
-                repo_urls = select_data_with_condition(
+                repo_infos = select_data_with_condition(
                     cursor,
                     table_name="github_repositories",
-                    select_condition="id, trees_url, commits_url, languages_url, description",
-                    where_condition=f"pushed_at > {repo_pushed_at_threshold} AND analyzed_at IS NULL",
+                    select_condition=columns_str,
+                    where_condition=f'TO_TIMESTAMP(pushed_at, \'YYYY-MM-DD"T"HH24:MI:SS"Z"\') > TO_TIMESTAMP({repo_pushed_at_threshold}) AND analyzed_at IS NULL',
                     limit=batch_size,
                 )
-        print("repo_urls: ", repo_urls)
 
-        if len(repo_urls) == 0:
+        if repo_infos is None or len(repo_infos) == 0:
             context["ti"].xcom_push(key="repo_infos", value=[])
             return "end"
         else:
-            context["ti"].xcom_push(key="repo_infos", value=repo_urls)
-            return "get_tree"
+            repo_infos = [dict(zip(columns, repo_info)) for repo_info in repo_infos]
+            context["ti"].xcom_push(key="repo_infos", value=repo_infos)
+            return "get_last_commit_sha"
 
     @task()
     def get_last_commit_sha(**context) -> list[dict]:
         print(f"==> Fetching last commit sha")
 
-        repo_infos = context["ti"].xcom_pull(task_ids="repo_infos")
+        repo_infos = context["ti"].xcom_pull(key="repo_infos")
 
-        result = []
         index = 0
-        for index, (id, trees_url, commits_url, languages_url, description) in enumerate(repo_infos):
+        for index, repo_info in enumerate(repo_infos):
             res = github_api_request(
                 "GET",
-                commits_url.replace("{/sha}", ""),
+                repo_info["commits_url"].replace("{/sha}", ""),
                 last_fetch_at=pendulum.datetime(2024, 1, 1),
                 params={"recursive": "true"},
             )
@@ -97,7 +100,7 @@ def analyze_repositories_dag():
                 continue
             print(commits[0])
             repo_infos[index]["last_commit_sha"] = commits[0]["sha"]
-                
+
             if res.headers["X-RateLimit-Remaining"] == 0:
                 print(
                     f"==> 403 Rate limit exceeded. Reset time: {pendulum.from_timestamp(int(res.headers['X-RateLimit-Reset']))}"
@@ -111,7 +114,6 @@ def analyze_repositories_dag():
                 break
             else:
                 Variable.delete("github_api_reset_utc_dt")
-            
 
             index += 1
             if index % 50 == 0 or index == len(repo_infos) - 1:
@@ -119,58 +121,47 @@ def analyze_repositories_dag():
                     f"==>> {index} commit sha fetched / rate limit:  {res.headers['X-RateLimit-Remaining']}"
                 )
 
+        context["ti"].xcom_push(key="repo_infos", value=repo_infos)
+
     @task()
     def get_tree(**context) -> list[dict]:
         print(f"==> Fetching repositories")
 
-        repo_urls = context["ti"].xcom_pull(task_ids="repo_infos")
+        repo_infos = context["ti"].xcom_pull(key="repo_infos")
+        print(f"==>> repo_urls: {repo_infos}")
 
-        result = []
-        index = 0
-        response = github_api_request(
-            "GET",
-            "https://api.github.com/repos/minki-j/gitmeetup/git/trees/ee85e2c53e0c97c523df2016e6488440fd324a55",
-            last_fetch_at=pendulum.datetime(2024, 1, 1),
-            params={"recursive": "true"},
-        )
+        for idx, repo_info in enumerate(repo_infos):
+            response = github_api_request(
+                "GET",
+                repo_info["trees_url"].replace("{/sha}", "/" + repo_info["last_commit_sha"]),
+                last_fetch_at=pendulum.datetime(2024, 1, 1),
+                params={"recursive": "true"},
+            )
+            data = response.json()
+            tree = data["tree"]
+            repo_infos[idx]["tree"] = generate_tree([item["path"] for item in tree])
 
-        return result
+        context["ti"].xcom_push(key="repo_infos", value=repo_infos)
 
     @task()
     def update_db(**context):
         print("==> update_db")
-        column_names_for_accounts = context["ti"].xcom_pull(
-            task_ids="get_column_names_for_accounts"
-        )
-        user_infos = context["ti"].xcom_pull(task_ids="get_repo_urls")
-        repositories = context["ti"].xcom_pull(task_ids="fetch_repo_urls")
+        repo_infos = context["ti"].xcom_pull(key="repo_infos")
 
         hook = PostgresHook(postgres_conn_id=Variable.get("POSTGRES_CONN_ID"))
         connection = hook.get_conn()
         with connection.cursor() as cursor:
             create_or_update_table(
                 cursor,
-                repositories,
+                repo_infos,
                 table_name="github_repositories",
             )
             insert_data(
                 cursor,
-                repositories,
+                repo_infos,
                 table_name="github_repositories",
             )
 
-            # mark the repo_last_fetch_at in github_accounts
-            data = []
-            for id, _ in user_infos:
-                data.append(
-                    {
-                        "id": id,
-                        "repos_last_fetched_at": pendulum.now().to_datetime_string(),
-                    }
-                )
-            update_table_multiple_rows(
-                cursor, "github_accounts", column_names_for_accounts, data, "id"
-            )
         connection.commit()
 
     trigger_analyze_repositories_dag = TriggerDagRunOperator(
@@ -190,6 +181,7 @@ def analyze_repositories_dag():
     (
         get_column_names_for_repositories
         >> get_repo_info_task
+        >> get_last_commit_sha()
         >> get_tree()
         >> update_db()
         >> trigger_analyze_repositories_dag

@@ -126,10 +126,11 @@ def select_data_with_condition(
     cursor, table_name: str, select_condition, where_condition: str, limit: int = None
 ):
     query = f"SELECT {select_condition} FROM {table_name} {'WHERE ' + where_condition if where_condition else ''} {'LIMIT ' + str(limit) if limit else ''};"
+    print(f"==>> query: {query}")
     try:
         cursor.execute(query)
     except Exception as e:
-        print(f"Failed to execute query: {query}")
+        print(f"Failed to execute query: {query}\n Error: {e}")
         return None
     return cursor.fetchall()
 

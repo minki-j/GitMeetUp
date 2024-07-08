@@ -13,18 +13,14 @@ def get_page_num(url):
 
 
 def fetch_github_acocunts_by_date_location(location: str, date: str):
+    print("date: ", date)
     base_url = "https://api.github.com/search/users?"
-    users = []
+    total_users = []
     overflowed_date = []
-    print(f"==>> location: {location}")
-    location = location.replace(" ", "%20")
-    print(f"==>> location: {location}")
 
     next_url = "first_page"
     while True:
-        if next_url is not None and next_url != "first_page":
-            response = github_api_request("GET", next_url, None)
-        elif next_url == "first_page":
+        if next_url == "first_page":
             response = github_api_request(
                 "GET",
                 base_url,
@@ -41,6 +37,8 @@ def fetch_github_acocunts_by_date_location(location: str, date: str):
             last_page_num = get_page_num(last_url)
             if last_page_num == 10:
                 overflowed_date.append(date)
+        elif next_url is not None:
+            response = github_api_request("GET", next_url, None)
         else:
             break
 
@@ -50,7 +48,7 @@ def fetch_github_acocunts_by_date_location(location: str, date: str):
             for user in users:
                 user["fetched_date_range"] = date
             if users:
-                users.extend(users)
+                total_users.extend(users)
             else:
                 if next_url != "first_page":
                     print(f"NO USER in date {date}. URL:{next_url}")
@@ -60,13 +58,14 @@ def fetch_github_acocunts_by_date_location(location: str, date: str):
             print(response.links.get("next", {}).get("url"))
             break
 
+        # print("rate limit: ", response.headers["X-RateLimit-Remaining"])
+
     reached_rate_limit = int(response.headers.get("X-RateLimit-Remaining")) < 1
     rate_limit_reset_time = int(response.headers.get("X-RateLimit-reset"))
-
+    print("users: ", [user["login"] for user in total_users])
     return (
-        users,
+        total_users,
         overflowed_date,
         reached_rate_limit,
         rate_limit_reset_time,
-        
     )

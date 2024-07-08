@@ -30,19 +30,24 @@ def github_api_request(type, url, last_fetch_at, params=None):
         raise ValueError(f"Unsupported type: {type}")
 
     if response.status_code == 200:
-        print(f"==> 200 OK for {url}")
+        # print(f"==> 200 OK for {url}")
+        pass
     elif response.status_code == 304:
         print(f"==> 304 Not Modified since the last fetch: {url}")
+        pass
     elif response.status_code == 403:
         print(f"403 Forbidden Error for {url} / Message: {response.text}")
         print(
             f"remaining rate limit: {response.headers['X-RateLimit-Remaining']} reset: {pendulum.from_timestamp(int(response.headers['X-RateLimit-Reset'])).in_tz('America/Montreal')}"
         )
+        pass
     elif response.status_code == 404:
         print(f"Not Found:{url}")
+        pass
     else:
         print(
             f"{response.status_code} Error for {url} / Message: {response.text}"
         )
+        pass
 
     return response

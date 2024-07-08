@@ -119,19 +119,19 @@ def fetch_user_full_info_dag():
             print("==>> Filter is done, branching to end")
             return "end"
         print("==>> Filter is not done, continuing the downstream tasks")
-        return "trigger_filter_accounts_dag"
+        return "trigger_fetch_user_full_info_dag"
 
-    trigger_filter_accounts_dag = TriggerDagRunOperator(
-        start_date=(
+    trigger_fetch_user_full_info_dag = TriggerDagRunOperator(
+        logical_date=(
             pendulum.from_format(
                 Variable.get(f"github_api_reset_utc_dt", 0),
-                fmt="YYYY-MM-DD HH:mm:ssZZ",
+                fmt="YYYY-MM-DD HH:mm:ss",
                 tz="UTC",
             )
             if Variable.get(f"github_api_reset_utc_dt", 0) != 0
             else pendulum.datetime(2024, 1, 1, tz="UTC")
         ),
-        task_id="trigger_filter_accounts_dag",
+        task_id="trigger_fetch_user_full_info_dag",
         trigger_dag_id="fetch_user_full_info_dag",
     )
 
@@ -148,8 +148,9 @@ def fetch_user_full_info_dag():
         >> fetch_user_url_task
         >> update_db_task
         >> is_finished_task
-        >> [trigger_filter_accounts_dag, end_task]
+        >> trigger_fetch_user_full_info_dag
     )
+    is_finished_task >> end_task
 
 
 fetch_user_full_info_dag()
