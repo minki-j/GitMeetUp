@@ -1,6 +1,8 @@
 import pendulum
 import subprocess
 import os
+import re
+import json
 
 from airflow.decorators import dag, task
 from airflow.models import Variable
@@ -89,7 +91,7 @@ def analyze_repositories_dag():
         else:
             repo_infos = [dict(zip(columns, repo_info)) for repo_info in repo_infos]
             context["ti"].xcom_push(key="repo_infos", value=repo_infos)
-            return "get_packages_used"
+            return "get_last_commit_sha"
 
     @task()
     def get_last_commit_sha(**context) -> list[dict]:
@@ -102,9 +104,11 @@ def analyze_repositories_dag():
             res = github_api_request(
                 "GET",
                 repo_info["commits_url"].replace("{/sha}", ""),
-                last_fetch_at=pendulum.datetime(2024, 1, 1),
+                last_fetch_at=None, # TODO: Add last_fetched_at
                 params={"recursive": "true"},
             )
+            if res.status_code != 200:
+                continue
             commits = res.json()
             if len(commits) == 0:
                 continue
@@ -136,7 +140,7 @@ def analyze_repositories_dag():
         print(f"==> Fetching repositories")
 
         repo_infos = context["ti"].xcom_pull(key="repo_infos")
-        print(f"==>> repo_urls: {repo_infos}")
+        print(f"==>> repo_infos: {repo_infos}")
 
         for idx, repo_info in enumerate(repo_infos):
             response = github_api_request(
@@ -144,7 +148,7 @@ def analyze_repositories_dag():
                 repo_info["trees_url"].replace(
                     "{/sha}", "/" + repo_info["last_commit_sha"]
                 ),
-                last_fetch_at=pendulum.datetime(2024, 1, 1),
+                last_fetch_at=None,
                 params={"recursive": "true"},
             )
             data = response.json()
@@ -154,11 +158,44 @@ def analyze_repositories_dag():
         context["ti"].xcom_push(key="repo_infos", value=repo_infos)
 
     @task()
+    def get_full_list_of_languages(**context):
+        print(f"==> get_full_list_of_languages")
+
+        repo_infos = context["ti"].xcom_pull(key="repo_infos")
+        print(f"==>> repo_infos: {repo_infos}")
+
+        for idx, repo_info in enumerate(repo_infos):
+            response = github_api_request(
+                "GET",
+                repo_info["languages_url"],
+                last_fetch_at=None,
+                params={},
+            )
+            data = response.json()
+            print(f"==>> data: {data}")
+            repo_infos[idx]["languages_full_list"] = data
+
+        context["ti"].xcom_push(key="repo_infos", value=repo_infos)
+
+    @task()
     def get_packages_used(**context):
         print(f"==> Fetching repositories")
+        languages_to_extract_packages = [
+            "Python",
+            "JavaScript",
+            "TypeScript",
+            "Jupyter Notebook",
+        ]
 
         repo_infos = context["ti"].xcom_pull(key="repo_infos")
         for repo_info in repo_infos:
+            # if the languages of the porject is not in the languages_to_extract_packages, skip the project
+            repo_info["packages_used"] = ""
+            if not any(
+                language.lower() in (key.lower() for key in repo_info["languages_full_list"].keys())
+                for language in languages_to_extract_packages
+            ):
+                continue
             clone_url = repo_info["clone_url"]
             print(f"==>> clone_url: {clone_url}")
             target_dir = os.path.join("./cloned_repositories", repo_info["full_name"])
@@ -167,13 +204,22 @@ def analyze_repositories_dag():
             print(f"==>> requirement_dir: {requirement_dir}")
 
             result = subprocess.run(
+                "ls",
+                capture_output=True,
+                check=True,
+                text=True,
+                shell=True,
+            )
+            print("current dir: ", result)
+
+            result = subprocess.run(
                 "rm -rf " + target_dir,
                 capture_output=True,
                 check=True,
                 text=True,
                 shell=True,
             )
-            print(f"rm -rf {target_dir}: {result}")
+            print(f"remove directory {target_dir}")
 
             try:
                 result = subprocess.run(
@@ -183,13 +229,12 @@ def analyze_repositories_dag():
                     text=True,
                     shell=True,
                 )
-                print("git clone result: ", result.stdout)
+                print("git clone result: ", result)
             except subprocess.CalledProcessError as e:
                 print(f"Error cloning repository: {e}")
                 print(f"Return code: {e.returncode}")
                 print(f"Output: {e.output}")
                 print(f"Error output: {e.stderr}")
-                repo_info["packages_used"] = None
                 continue
 
             # create requirement_dir
@@ -202,28 +247,79 @@ def analyze_repositories_dag():
             )
             print("create requirement dir: ", result)
 
-            save_path = os.path.join(requirement_dir, "requirements.txt")
-            try:
-                result = subprocess.run(
-                    "pipreqs --savepath " + save_path + " " + target_dir,
-                    capture_output=True,
-                    check=True,
-                    text=True,
-                    shell=True,
-                )
-                print("pipreqs result: ", result.stdout)
-                print("pipreqs result: ", result.stderr)
-            except subprocess.CalledProcessError as e:
-                print(f"Error cloning repository: {e}")
-                print(f"Return code: {e.returncode}")
-                print(f"Output: {e.output}")
-                print(f"Error output: {e.stderr}")
+            # Extracing Python packages
+            if "Python" in repo_info["languages_full_list"].keys():
+                save_path = os.path.join(requirement_dir, "requirements.txt")
+                exlude_dirs = []
+                while True:
+                    try:
+                        result = subprocess.run(
+                            "pipreqs --savepath "
+                            + save_path
+                            # + " --ignore "
+                            # + ",".join(exlude_dirs)
+                            + " "
+                            + target_dir,
+                            capture_output=True,
+                            check=True,
+                            text=True,
+                            shell=True,
+                        )
 
-            # read the requirements.txt file
-            with open(save_path, "r") as f:
-                requirements = f.read().splitlines()
-                print(f"==>> requirements: {requirements}")
-            repo_info["packages_used"] = requirements
+                        # TODO: need to handle jupyter notebook separately since it's not covered by pipreqs
+
+                        with open(save_path, "r") as f:
+                            requirements = f.read().splitlines()
+                            print(f"==>> requirements: {requirements}")
+
+                        repo_info["packages_used"] += requirements
+
+                        break
+                    except subprocess.CalledProcessError as e:
+                        error_msg = e.stderr
+                        error_file_path = re.search(
+                            r"Failed on file: (.+\.\w+)", error_msg
+                        ).group(1)
+                        if not error_file_path:
+
+                            print(
+                                f"No error file path found for {clone_url}, which means that the error is not related to the file. Check the error message: {error_msg}"
+                            )
+                            break
+                        else:
+                            exlude_dirs.append(error_file_path)
+                            print(f"Error on file {error_file_path}")
+                            result = subprocess.run(
+                                "rm " + error_file_path,
+                                capture_output=True,
+                                check=True,
+                                text=True,
+                                shell=True,
+                            )
+                            print(f"remove the file: {result}")
+                            continue
+
+            if any(["JavaScript", "TypeScript"] in repo_info["languages_full_list"].keys()):
+                print("==>> JavaScript or TypeScript")
+                # find package.json file from the repo
+                package_json_files = []
+                for root, dirs, files in os.walk(target_dir):
+                    for file in files:
+                        if file == "package.json":
+                            package_json_files.append(os.path.join(root, file))
+
+                if len(package_json_files) == 0:
+                    continue
+
+                # extract packages from package.json
+                packages = []
+                for package_json_file in package_json_files:
+                    with open(package_json_file, "r") as f:
+                        package_json = json.load(f)
+                        if "dependencies" in package_json:
+                            packages.extend(package_json["dependencies"].keys())
+
+                repo_info["packages_used"] += ", ".join(packages)
 
             result = subprocess.run(
                 "rm -rf " + target_dir,
@@ -274,10 +370,11 @@ def analyze_repositories_dag():
     (
         get_column_names_for_repositories
         >> get_repo_info_task
-        # >> get_last_commit_sha()
-        # >> get_tree()
+        >> get_last_commit_sha()
+        >> get_tree()
+        >> get_full_list_of_languages()
         >> get_packages_used()
-        # >> update_db()
+        >> update_db()
         >> end_task
     )
 

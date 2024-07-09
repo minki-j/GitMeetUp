@@ -73,6 +73,8 @@ def fetch_user_full_info_dag():
 
             if res.status_code == 200:
                 updated_user_info = res.json()
+            else:
+                updated_user_info = {}
 
             updated_user_info["id"] = id 
             updated_user_info["last_fetched_at"] = pendulum.now().to_datetime_string()
