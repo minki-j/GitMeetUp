@@ -77,9 +77,9 @@ def fetch_user_full_info_dag():
             updated_user_info["id"] = id 
             updated_user_info["last_fetched_at"] = pendulum.now().to_datetime_string()
 
-            if res.headers["X-RateLimit-Remaining"] == 0:
+            if int(res.headers["X-RateLimit-Remaining"]) == 0:
                 print(
-                    f"==> 403 Rate limit exceeded. Reset time: {pendulum.from_timestamp(int(res.headers['X-RateLimit-Reset']))}"
+                    f"==> 403 Rate limit exceeded. Reset time UTC: {pendulum.from_timestamp(int(res.headers['X-RateLimit-Reset']))}"
                 )
                 Variable.set(
                     "github_api_reset_utc_dt",
@@ -123,13 +123,9 @@ def fetch_user_full_info_dag():
 
     trigger_fetch_user_full_info_dag = TriggerDagRunOperator(
         logical_date=(
-            pendulum.from_format(
-                Variable.get(f"github_api_reset_utc_dt", 0),
-                fmt="YYYY-MM-DD HH:mm:ss",
-                tz="UTC",
-            )
-            if Variable.get(f"github_api_reset_utc_dt", 0) != 0
-            else pendulum.datetime(2024, 1, 1, tz="UTC")
+            pendulum.parse(Variable.get(f"github_api_reset_utc_dt"))
+            if Variable.get(f"github_api_reset_utc_dt", None)
+            else pendulum.now()
         ),
         task_id="trigger_fetch_user_full_info_dag",
         trigger_dag_id="fetch_user_full_info_dag",

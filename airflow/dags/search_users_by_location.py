@@ -33,7 +33,11 @@ from dags.utils.sql import create_or_update_table, insert_data
     schedule="@once",
     catchup=False,
     doc_md=__doc__,
-    default_args={"owner": "Minki", "retries": 3, "retry_delay": pendulum.duration(seconds=10)},
+    default_args={
+        "owner": "Minki",
+        "retries": 1,
+        "retry_delay": pendulum.duration(seconds=10),
+    },
     tags=["github"],
 )
 def search_users_by_location_dag(location: str = "montreal"):
@@ -53,10 +57,7 @@ def search_users_by_location_dag(location: str = "montreal"):
         for idx, date in enumerate(dates):
             if idx < next_query_date_idx:
                 continue
-            # if idx > 0:
-            #     print("DEBUG MODE: breaking after 1 iterations")
-            #     next_query_date_idx = idx
-            #     break
+
             (
                 accounts_in_date,
                 overflowed_date,
@@ -66,6 +67,7 @@ def search_users_by_location_dag(location: str = "montreal"):
 
             if accounts_in_date:
                 accounts.extend(accounts_in_date)
+
             if len(overflowed_date) > 0:
                 overflowed_date_from_var = Variable.get(
                     f"overflowed_date_{location}", default_var=[]
@@ -76,21 +78,30 @@ def search_users_by_location_dag(location: str = "montreal"):
                     len(overflowed_date_from_var),
                 )
                 Variable.set(f"overflowed_date_{location}", overflowed_date_from_var)
+
             if reached_rate_limit:
                 next_query_date_idx = idx
                 Variable.set(f"next_query_date_idx_{location}", next_query_date_idx)
                 Variable.set(
                     f"github_search_api_reset_utc_dt",
-                    pendulum.from_timestamp(rate_limit_reset_time, tz="UTC").to_datetime_string(),
+                    pendulum.from_timestamp(
+                        rate_limit_reset_time, tz="UTC"
+                    ).to_datetime_string(),
                 )
                 break
             else:
-                Variable.set(f"github_search_api_reset_utc_dt", 0)
+                Variable.delete(f"github_search_api_reset_utc_dt")
+
             if idx == len(dates) - 1:
                 Variable.delete(f"next_query_date_idx_{location}")
                 print("==>> All queries are done, setting Variable to True")
                 Variable.set(f"is_query_for_{location}_done", True)
                 break
+
+            # if len(accounts) > 0:
+            #     print("DEBUG MODE: breaking after 1 acocunt")
+            #     next_query_date_idx = idx
+            #     break
 
         print(
             f"processed {next_query_date_idx - 1} out of {len(dates)} / until {dates[next_query_date_idx - 1]}"
@@ -130,13 +141,9 @@ def search_users_by_location_dag(location: str = "montreal"):
 
     trigger_self_dag = TriggerDagRunOperator(
         logical_date=(
-            pendulum.from_format(
-                Variable.get(f"github_search_api_reset_utc_dt", 0),
-                fmt="YYYY-MM-DD HH:mm:ss",
-                tz="UTC",
-            )
-            if Variable.get(f"github_search_api_reset_utc_dt", 0) != 0
-            else pendulum.datetime(2024, 1, 1, tz="UTC")
+            pendulum.parse(Variable.get(f"github_search_api_reset_utc_dt"))
+            if Variable.get(f"github_search_api_reset_utc_dt", None)
+            else pendulum.now()
         ),
         task_id="trigger_self_dag",
         trigger_dag_id="search_users_by_location_dag",

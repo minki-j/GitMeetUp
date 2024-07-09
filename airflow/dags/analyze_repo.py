@@ -1,4 +1,6 @@
 import pendulum
+import subprocess
+import os
 
 from airflow.decorators import dag, task
 from airflow.models import Variable
@@ -20,7 +22,7 @@ from include.github_api_call.request import github_api_request
 from include.utils.generate_tree import generate_tree
 
 # TODO: languages, description, recent_30_commits, pushed_at, packages_used, directory_structure
-#
+
 # llm_inspection_for_commits
 # llm_inspection_for_entire_repo
 
@@ -49,10 +51,18 @@ def analyze_repositories_dag():
 
         hook = PostgresHook(postgres_conn_id=Variable.get("POSTGRES_CONN_ID"))
         connection = hook.get_conn()
-        batch_size = 2
+        batch_size = 10
         repo_pushed_at_threshold = pendulum.now().subtract(days=30).timestamp()
 
-        columns = ["id", "trees_url", "commits_url", "languages_url", "description"]
+        columns = [
+            "id",
+            "full_name",
+            "trees_url",
+            "commits_url",
+            "languages_url",
+            "description",
+            "clone_url",
+        ]
         columns_str = ", ".join(columns)
 
         with connection.cursor() as cursor:
@@ -79,7 +89,7 @@ def analyze_repositories_dag():
         else:
             repo_infos = [dict(zip(columns, repo_info)) for repo_info in repo_infos]
             context["ti"].xcom_push(key="repo_infos", value=repo_infos)
-            return "get_last_commit_sha"
+            return "get_packages_used"
 
     @task()
     def get_last_commit_sha(**context) -> list[dict]:
@@ -101,15 +111,13 @@ def analyze_repositories_dag():
             print(commits[0])
             repo_infos[index]["last_commit_sha"] = commits[0]["sha"]
 
-            if res.headers["X-RateLimit-Remaining"] == 0:
+            if int(res.headers["X-RateLimit-Remaining"]) == 0:
                 print(
-                    f"==> 403 Rate limit exceeded. Reset time: {pendulum.from_timestamp(int(res.headers['X-RateLimit-Reset']))}"
+                    f"==> 403 Rate limit exceeded. Reset time UTC: {pendulum.from_timestamp(int(res.headers['X-RateLimit-Reset']))}"
                 )
                 Variable.set(
                     "github_api_reset_utc_dt",
-                    pendulum.from_timestamp(
-                        int(res.headers["X-RateLimit-Reset"])
-                    ),
+                    pendulum.from_timestamp(int(res.headers["X-RateLimit-Reset"])),
                 )
                 break
             else:
@@ -124,7 +132,7 @@ def analyze_repositories_dag():
         context["ti"].xcom_push(key="repo_infos", value=repo_infos)
 
     @task()
-    def get_tree(**context) -> list[dict]:
+    def get_tree(**context):
         print(f"==> Fetching repositories")
 
         repo_infos = context["ti"].xcom_pull(key="repo_infos")
@@ -133,13 +141,98 @@ def analyze_repositories_dag():
         for idx, repo_info in enumerate(repo_infos):
             response = github_api_request(
                 "GET",
-                repo_info["trees_url"].replace("{/sha}", "/" + repo_info["last_commit_sha"]),
+                repo_info["trees_url"].replace(
+                    "{/sha}", "/" + repo_info["last_commit_sha"]
+                ),
                 last_fetch_at=pendulum.datetime(2024, 1, 1),
                 params={"recursive": "true"},
             )
             data = response.json()
             tree = data["tree"]
             repo_infos[idx]["tree"] = generate_tree([item["path"] for item in tree])
+
+        context["ti"].xcom_push(key="repo_infos", value=repo_infos)
+
+    @task()
+    def get_packages_used(**context):
+        print(f"==> Fetching repositories")
+
+        repo_infos = context["ti"].xcom_pull(key="repo_infos")
+        for repo_info in repo_infos:
+            clone_url = repo_info["clone_url"]
+            print(f"==>> clone_url: {clone_url}")
+            target_dir = os.path.join("./cloned_repositories", repo_info["full_name"])
+            print(f"==>> target_dir: {target_dir}")
+            requirement_dir = os.path.join("./packages_used", repo_info["full_name"])
+            print(f"==>> requirement_dir: {requirement_dir}")
+
+            result = subprocess.run(
+                "rm -rf " + target_dir,
+                capture_output=True,
+                check=True,
+                text=True,
+                shell=True,
+            )
+            print(f"rm -rf {target_dir}: {result}")
+
+            try:
+                result = subprocess.run(
+                    "git clone " + clone_url + " " + target_dir,
+                    capture_output=True,
+                    check=True,
+                    text=True,
+                    shell=True,
+                )
+                print("git clone result: ", result.stdout)
+            except subprocess.CalledProcessError as e:
+                print(f"Error cloning repository: {e}")
+                print(f"Return code: {e.returncode}")
+                print(f"Output: {e.output}")
+                print(f"Error output: {e.stderr}")
+                repo_info["packages_used"] = None
+                continue
+
+            # create requirement_dir
+            result = subprocess.run(
+                "mkdir -p " + requirement_dir + " && ls",
+                capture_output=True,
+                check=True,
+                text=True,
+                shell=True,
+            )
+            print("create requirement dir: ", result)
+
+            save_path = os.path.join(requirement_dir, "requirements.txt")
+            try:
+                result = subprocess.run(
+                    "pipreqs --savepath " + save_path + " " + target_dir,
+                    capture_output=True,
+                    check=True,
+                    text=True,
+                    shell=True,
+                )
+                print("pipreqs result: ", result.stdout)
+                print("pipreqs result: ", result.stderr)
+            except subprocess.CalledProcessError as e:
+                print(f"Error cloning repository: {e}")
+                print(f"Return code: {e.returncode}")
+                print(f"Output: {e.output}")
+                print(f"Error output: {e.stderr}")
+
+            # read the requirements.txt file
+            with open(save_path, "r") as f:
+                requirements = f.read().splitlines()
+                print(f"==>> requirements: {requirements}")
+            repo_info["packages_used"] = requirements
+
+            result = subprocess.run(
+                "rm -rf " + target_dir,
+                capture_output=True,
+                check=True,
+                text=True,
+                shell=True,
+            )
+            print(f"remove cloned repo {target_dir}: {result}")
 
         context["ti"].xcom_push(key="repo_infos", value=repo_infos)
 
@@ -164,15 +257,15 @@ def analyze_repositories_dag():
 
         connection.commit()
 
-    trigger_analyze_repositories_dag = TriggerDagRunOperator(
-        logical_date=(
-            Variable.get(f"github_api_reset_utc_dt", 0)
-            if Variable.get(f"github_api_reset_utc_dt", 0) != 0
-            else pendulum.now(tz="UTC").to_datetime_string()
-        ),
-        task_id="trigger_analyze_repositories_dag",
-        trigger_dag_id="analyze_repositories_dag",
-    )
+    # trigger_analyze_repositories_dag = TriggerDagRunOperator(
+    #     logical_date=(
+    #         pendulum.parse(Variable.get(f"github__api_reset_utc_dt"))
+    #         if Variable.get(f"github__api_reset_utc_dt", None)
+    #         else pendulum.now()
+    #     ),
+    #     task_id="trigger_analyze_repositories_dag",
+    #     trigger_dag_id="analyze_repositories_dag",
+    # )
 
     end_task = EmptyOperator(task_id="end")
 
@@ -181,10 +274,11 @@ def analyze_repositories_dag():
     (
         get_column_names_for_repositories
         >> get_repo_info_task
-        >> get_last_commit_sha()
-        >> get_tree()
-        >> update_db()
-        >> trigger_analyze_repositories_dag
+        # >> get_last_commit_sha()
+        # >> get_tree()
+        >> get_packages_used()
+        # >> update_db()
+        >> end_task
     )
 
     get_repo_info_task >> end_task

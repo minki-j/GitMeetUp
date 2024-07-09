@@ -57,21 +57,20 @@ def create_or_update_table(cursor, data: list[dict], table_name: str):
     # Deprecated version
     # create_table_query = f"CREATE TABLE IF NOT EXISTS {table_name} ({column_definitions}, PRIMARY KEY ({primary_key}));"
 
-    #TODO: This query needed to be tested!
+    # TODO: This query needed to be tested!
     create_table_query = f"""
 CREATE TABLE IF NOT EXISTS {table_name} (
     {column_definitions}, 
-    PRIMARY KEY ({primary_key}),
-    FOREIGN KEY (user_id) REFERENCES github_accounts(id)
+    PRIMARY KEY ({primary_key})
+    {"" if table_name == "github_accounts" else ", FOREIGN KEY (user_id) REFERENCES github_accounts(id)"}
 );
 """
-    
+
     try:
         cursor.execute(create_table_query)
         logging.info(f"Table '{table_name}' created or already exists.")
     except Exception as e:
-        logging.error(f"Error creating table '{table_name}': {e}")
-        return
+        raise Exception(f"Failed to create table '{table_name}'. Query: {create_table_query}") from e
 
     # Check for new columns and add them
     existing_columns = get_existing_columns(cursor, table_name)

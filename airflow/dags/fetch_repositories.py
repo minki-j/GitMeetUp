@@ -48,12 +48,14 @@ def fetch_repositories_dag():
         connection = hook.get_conn()
         batch_size = 100
 
+        existing_cols = context["ti"].xcom_pull(task_ids="get_column_names_for_accounts")
+
         with connection.cursor() as cursor:
             repo_urls = select_data_with_condition(
                 cursor,
                 table_name="github_accounts",
                 select_condition="id, repos_url",
-                where_condition="repos_url IS NOT NULL AND repos_last_fetched_at IS NULL",
+                where_condition=f"repos_url IS NOT NULL {'AND repos_last_fetched_at IS NULL' if 'repos_last_fetched_at' in existing_cols else ''}",
                 limit=batch_size,
             )
         print("repo_urls: ", repo_urls)
@@ -101,9 +103,9 @@ def fetch_repositories_dag():
                 repo["user_id"] = user_id
                 repo["last_fetched_at"] = pendulum.now().to_datetime_string()
 
-            if res.headers["X-RateLimit-Remaining"] == 0:
+            if int(res.headers["X-RateLimit-Remaining"]) == 0:
                 print(
-                    f"==> 403 Rate limit exceeded. Reset time: {pendulum.from_timestamp(int(res.headers['X-RateLimit-Reset']))}"
+                    f"==> 403 Rate limit exceeded. Reset time UTC: {pendulum.from_timestamp(int(res.headers['X-RateLimit-Reset']))}"
                 )
                 Variable.set(
                     "github_api_reset_utc_dt",
@@ -174,9 +176,9 @@ def fetch_repositories_dag():
 
     trigger_filter_accounts_dag = TriggerDagRunOperator(
         logical_date=(
-            Variable.get(f"github_api_reset_utc_dt", 0)
-            if Variable.get(f"github_api_reset_utc_dt", 0) != 0
-            else pendulum.now(tz="UTC").to_datetime_string()
+            pendulum.parse(Variable.get(f"github_api_reset_utc_dt"))
+            if Variable.get(f"github_api_reset_utc_dt", None)
+            else pendulum.now()
         ),
         task_id="trigger_fetch_repositories_dag",
         trigger_dag_id="fetch_repositories_dag",
@@ -187,9 +189,9 @@ def fetch_repositories_dag():
     is_finished_task = is_finished()
 
     (
-        get_repo_urls()
+        get_column_names_for_accounts
+        >> get_repo_urls()
         >> fetch_repo_urls()
-        >> get_column_names_for_accounts
         >> update_db()
         >> is_finished_task
         >> trigger_filter_accounts_dag
