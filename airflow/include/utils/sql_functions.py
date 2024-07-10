@@ -1,6 +1,6 @@
 import json
 import logging
-from dags.schemas.github_user_schema import GITHUB_USER_SCHEMA, GITHUB_REPO_SCHEMA
+from include.schemas.github_user_schema import GITHUB_USER_SCHEMA, GITHUB_REPO_SCHEMA
 
 
 def convert_to_sql_data_type(val_type):

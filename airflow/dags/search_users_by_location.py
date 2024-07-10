@@ -4,28 +4,16 @@
 This DAG is used to scrape and filter github accounts and repositories. The DAG is scheduled to run every hour until it finished scraping all the accounts and repositories in a given location.
 """
 
-import os
-import time
-import requests
-from typing import List
-from psycopg2 import sql
 import pendulum
 
-from airflow import Dataset
 from airflow.decorators import dag, task
 from airflow.models import Variable
-from airflow.models.xcom_arg import XComArg
-from airflow.operators.empty import EmptyOperator
-from airflow.operators.bash import BashOperator
-from airflow.operators.python import PythonOperator
 from airflow.operators.trigger_dagrun import TriggerDagRunOperator
-from airflow.providers.postgres.operators.postgres import PostgresOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
-from airflow.providers.github.operators.github import GithubOperator
 
 from include.github_api_call.fetch_users import fetch_github_acocunts_by_date_location
-from dags.utils.date_utils import generate_date_intervals
-from dags.utils.sql import create_or_update_table, insert_data
+from include.utils.date_utils import generate_date_intervals
+from include.utils.sql_functions import create_or_update_table, insert_data
 
 
 @dag(

@@ -1,8 +1,8 @@
-import pendulum
-import subprocess
 import os
 import re
 import json
+import subprocess
+import pendulum
 
 from airflow.decorators import dag, task
 from airflow.models import Variable
@@ -14,19 +14,13 @@ from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 
 from dags.common_tasks.get_column_names import get_col_names
-from dags.utils.sql import (
+from include.utils.sql_functions import (
     select_data_with_condition,
-    update_table_multiple_rows,
     create_or_update_table,
     insert_data,
 )
 from include.github_api_call.request import github_api_request
 from include.utils.generate_tree import generate_tree
-
-# TODO: languages, description, recent_30_commits, pushed_at, packages_used, directory_structure
-
-# llm_inspection_for_commits
-# llm_inspection_for_entire_repo
 
 
 @dag(

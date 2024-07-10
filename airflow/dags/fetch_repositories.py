@@ -2,22 +2,18 @@
 ### Github Repo DAG
 This DAG is used to scrape repositories from Github acocunts. The DAG is scheduled to run whenever the `github_accounts` dataset is updated.
 """
-
-import time
 import pendulum
 
 from airflow.decorators import dag, task
 from airflow.models import Variable
 
-
-from airflow.operators.empty import EmptyOperator
 from airflow.operators.python import PythonOperator
 from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 
 from dags.common_tasks.get_column_names import get_col_names
-from dags.utils.sql import (
+from include.utils.sql_functions import (
     select_data_with_condition,
     update_table_multiple_rows,
     create_or_update_table,

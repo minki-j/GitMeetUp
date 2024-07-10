@@ -1,10 +1,8 @@
-import time
 import pendulum
 
 from airflow.decorators import dag, task
 from airflow.models import Variable
 
-from airflow.operators.empty import EmptyOperator
 from airflow.operators.python import PythonOperator
 from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 
@@ -12,7 +10,7 @@ from airflow.providers.postgres.hooks.postgres import PostgresHook
 
 from include.github_api_call.request import github_api_request
 from dags.common_tasks.get_column_names import get_col_names
-from dags.utils.sql import select_data_with_condition, update_table_multiple_rows
+from include.utils.sql_functions import select_data_with_condition, update_table_multiple_rows
 
 
 @dag(
