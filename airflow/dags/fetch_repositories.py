@@ -42,13 +42,15 @@ def fetch_repositories_dag():
         op_args=["github_accounts"],
     )
 
-    @task()
+    @task.branch()
     def get_repo_urls(**context) -> list[dict]:
         hook = PostgresHook(postgres_conn_id=Variable.get("POSTGRES_CONN_ID"))
         connection = hook.get_conn()
         batch_size = 100
 
-        existing_cols = context["ti"].xcom_pull(task_ids="get_column_names_for_accounts")
+        existing_cols = context["ti"].xcom_pull(
+            task_ids="get_column_names_for_accounts"
+        )
 
         with connection.cursor() as cursor:
             repo_urls = select_data_with_condition(
@@ -61,28 +63,31 @@ def fetch_repositories_dag():
         print("repo_urls: ", repo_urls)
 
         if len(repo_urls) == 0:
-            Variable.set("is_fetch_repositories_done", "True")
+            print("==>> Loop is done, trigger the next dag")
+            return "trigger_fetch_full_repositories_dag"
         else:
-            Variable.set("is_fetch_repositories_done", "False")
-
-        return repo_urls
+            print("==>> Loop is not done, keep running the downstream tasks")
+            context["ti"].xcom_push(key="repo_urls", value=repo_urls)
+            return "fetch_repo_urls"
 
     @task()
     def fetch_repo_urls(**context) -> list[dict]:
         print(f"==> Fetching repositories")
 
-        repo_urls = context["ti"].xcom_pull(task_ids="get_repo_urls")
-        if len(repo_urls) == 0:
-            print("No repo_urls to fetch")
-            return
+        repo_urls = context["ti"].xcom_pull(key="repo_urls")
+        
         result = []
         index = 0
-
         for user_id, url in repo_urls:
             res = github_api_request("GET", url, None)  # TODO: Add last_fetched_at
             if res.status_code == 200:
                 repositories = res.json()
                 if len(repositories) == 0:
+                    index += 1
+                    if index % 50 == 0 or index == len(repo_urls):
+                        print(
+                            f"==>> {index} repo fetched / rate limit:  {res.headers['X-RateLimit-Remaining']}"
+                        )
                     continue
 
                 for repo in repositories:
@@ -117,7 +122,7 @@ def fetch_repositories_dag():
 
             result.extend(repositories)
             index += 1
-            if index % 50 == 0:
+            if index % 50 == 0 or index == len(repo_urls):
                 print(
                     f"==>> {index} repo fetched / rate limit:  {res.headers['X-RateLimit-Remaining']}"
                 )
@@ -132,7 +137,7 @@ def fetch_repositories_dag():
         column_names_for_accounts = context["ti"].xcom_pull(
             task_ids="get_column_names_for_accounts"
         )
-        user_infos = context["ti"].xcom_pull(task_ids="get_repo_urls")
+        repo_urls = context["ti"].xcom_pull(key="repo_urls")
         repositories = context["ti"].xcom_pull(task_ids="fetch_repo_urls")
 
         hook = PostgresHook(postgres_conn_id=Variable.get("POSTGRES_CONN_ID"))
@@ -151,7 +156,7 @@ def fetch_repositories_dag():
 
             # mark the repo_last_fetch_at in github_accounts
             data = []
-            for id, _ in user_infos:
+            for id, _repo_url in repo_urls:
                 data.append(
                     {
                         "id": id,
@@ -163,41 +168,36 @@ def fetch_repositories_dag():
             )
         connection.commit()
 
-    @task.branch(task_id="is_query_not_completed")
-    def is_finished():
-        is_finished_str = Variable.get(f"is_fetch_repositories_done", "False")
-        is_finished = is_finished_str == "True"
-
-        if is_finished:
-            print("==>> Loop is done, branching to end")
-            return "end"
-        print("==>> Loop is not done, continuing the downstream tasks")
-        return "trigger_fetch_repositories_dag"
-
-    trigger_filter_accounts_dag = TriggerDagRunOperator(
+    trigger_self_dag = TriggerDagRunOperator(
         logical_date=(
             pendulum.parse(Variable.get(f"github_api_reset_utc_dt"))
             if Variable.get(f"github_api_reset_utc_dt", None)
             else pendulum.now()
         ),
-        task_id="trigger_fetch_repositories_dag",
+        task_id="trigger_self_dag",
         trigger_dag_id="fetch_repositories_dag",
     )
 
-    end_task = EmptyOperator(task_id="end")
-
-    is_finished_task = is_finished()
-
-    (
-        get_column_names_for_accounts
-        >> get_repo_urls()
-        >> fetch_repo_urls()
-        >> update_db()
-        >> is_finished_task
-        >> trigger_filter_accounts_dag
+    trigger_fetch_full_repositories_dag = TriggerDagRunOperator(
+        logical_date=(
+            pendulum.parse(Variable.get(f"github_api_reset_utc_dt"))
+            if Variable.get(f"github_api_reset_utc_dt", None)
+            else pendulum.now()
+        ),
+        task_id="trigger_fetch_full_repositories_dag",
+        trigger_dag_id="fetch_full_repositories_dag",
     )
 
-    is_finished_task >> end_task
+    get_repo_urls_task = get_repo_urls()
+    (
+        get_column_names_for_accounts
+        >> get_repo_urls_task
+        >> fetch_repo_urls()
+        >> update_db()
+        >> trigger_self_dag
+    )
+
+    get_repo_urls_task >> trigger_fetch_full_repositories_dag
 
 
 fetch_repositories_dag()

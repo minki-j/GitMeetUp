@@ -1,5 +1,0 @@
-apache-airflow==2.9.2
-pendulum==3.0.0
-psycopg2_binary==2.9.9
-pytest==8.2.2
-Requests==2.32.3

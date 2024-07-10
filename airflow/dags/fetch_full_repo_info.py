@@ -37,7 +37,7 @@ from include.utils.generate_tree import generate_tree
     default_args={"owner": "Minki", "retries": 0},
     tags=["github"],
 )
-def analyze_repositories_dag():
+def fetch_full_repositories_dag():
 
     get_column_names_for_repositories = PythonOperator(
         task_id="get_column_names_for_repositories",
@@ -64,26 +64,28 @@ def analyze_repositories_dag():
             "languages_url",
             "description",
             "clone_url",
+            "fork"
         ]
         columns_str = ", ".join(columns)
 
         with connection.cursor() as cursor:
-            if "analyzed_at" not in existing_columns:
-                repo_infos = select_data_with_condition(
-                    cursor,
-                    table_name="github_repositories",
-                    select_condition=columns_str,
-                    where_condition=f'TO_TIMESTAMP(pushed_at, \'YYYY-MM-DD"T"HH24:MI:SS"Z"\') > TO_TIMESTAMP({repo_pushed_at_threshold})',
-                    limit=batch_size,
-                )
-            else:
-                repo_infos = select_data_with_condition(
-                    cursor,
-                    table_name="github_repositories",
-                    select_condition=columns_str,
-                    where_condition=f'TO_TIMESTAMP(pushed_at, \'YYYY-MM-DD"T"HH24:MI:SS"Z"\') > TO_TIMESTAMP({repo_pushed_at_threshold}) AND analyzed_at IS NULL',
-                    limit=batch_size,
-                )
+            where_condition = f"""
+            TO_TIMESTAMP(pushed_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') > TO_TIMESTAMP({repo_pushed_at_threshold}) 
+            AND TO_TIMESTAMP(pushed_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') > TO_TIMESTAMP(created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') + interval '1 day'
+            AND size < 50000
+            """ + (
+                "AND fetched_full_info_at IS NULL"
+                if "fetched_full_info_at" in existing_columns
+                else ""
+            )
+
+            repo_infos = select_data_with_condition(
+                cursor,
+                table_name="github_repositories",
+                select_condition=columns_str,
+                where_condition=where_condition,
+                limit=batch_size,
+            )
 
         if repo_infos is None or len(repo_infos) == 0:
             context["ti"].xcom_push(key="repo_infos", value=[])
@@ -108,6 +110,8 @@ def analyze_repositories_dag():
                 params={"recursive": "true"},
             )
             if res.status_code != 200:
+                print(f"Error fetching commits: {repo_info['commits_url']}")
+                repo_infos[index]["last_commit_sha"] = None
                 continue
             commits = res.json()
             if len(commits) == 0:
@@ -130,7 +134,7 @@ def analyze_repositories_dag():
             index += 1
             if index % 50 == 0 or index == len(repo_infos) - 1:
                 print(
-                    f"==>> {index} commit sha fetched / rate limit:  {res.headers['X-RateLimit-Remaining']}"
+                    f"{index} commit sha fetched / rate limit:  {res.headers['X-RateLimit-Remaining']}"
                 )
 
         context["ti"].xcom_push(key="repo_infos", value=repo_infos)
@@ -189,28 +193,18 @@ def analyze_repositories_dag():
 
         repo_infos = context["ti"].xcom_pull(key="repo_infos")
         for repo_info in repo_infos:
-            # if the languages of the porject is not in the languages_to_extract_packages, skip the project
             repo_info["packages_used"] = ""
+
             if not any(
                 language.lower() in (key.lower() for key in repo_info["languages_full_list"].keys())
                 for language in languages_to_extract_packages
             ):
                 continue
-            clone_url = repo_info["clone_url"]
-            print(f"==>> clone_url: {clone_url}")
-            target_dir = os.path.join("./cloned_repositories", repo_info["full_name"])
-            print(f"==>> target_dir: {target_dir}")
-            requirement_dir = os.path.join("./packages_used", repo_info["full_name"])
-            print(f"==>> requirement_dir: {requirement_dir}")
 
-            result = subprocess.run(
-                "ls",
-                capture_output=True,
-                check=True,
-                text=True,
-                shell=True,
-            )
-            print("current dir: ", result)
+            clone_url = repo_info["clone_url"]
+
+            target_dir = os.path.join("./cloned_repositories", repo_info["full_name"])
+            requirement_dir = os.path.join("./packages_used", repo_info["full_name"])
 
             result = subprocess.run(
                 "rm -rf " + target_dir,
@@ -219,9 +213,9 @@ def analyze_repositories_dag():
                 text=True,
                 shell=True,
             )
-            print(f"remove directory {target_dir}")
 
             try:
+                print("start cloning ", clone_url)
                 result = subprocess.run(
                     "git clone " + clone_url + " " + target_dir,
                     capture_output=True,
@@ -229,7 +223,6 @@ def analyze_repositories_dag():
                     text=True,
                     shell=True,
                 )
-                print("git clone result: ", result)
             except subprocess.CalledProcessError as e:
                 print(f"Error cloning repository: {e}")
                 print(f"Return code: {e.returncode}")
@@ -245,7 +238,6 @@ def analyze_repositories_dag():
                 text=True,
                 shell=True,
             )
-            print("create requirement dir: ", result)
 
             # Extracing Python packages
             if "Python" in repo_info["languages_full_list"].keys():
@@ -270,9 +262,11 @@ def analyze_repositories_dag():
 
                         with open(save_path, "r") as f:
                             requirements = f.read().splitlines()
-                            print(f"==>> requirements: {requirements}")
 
-                        repo_info["packages_used"] += requirements
+                        requirements = [re.sub(r"==.*", "", requirement) for requirement in requirements]
+                        print(f"python packages: {requirements}")
+
+                        repo_info["packages_used"] += ", ".join(requirements)
 
                         break
                     except subprocess.CalledProcessError as e:
@@ -288,7 +282,7 @@ def analyze_repositories_dag():
                             break
                         else:
                             exlude_dirs.append(error_file_path)
-                            print(f"Error on file {error_file_path}")
+                            # print(f"Error on file {error_file_path}")
                             result = subprocess.run(
                                 "rm " + error_file_path,
                                 capture_output=True,
@@ -296,11 +290,14 @@ def analyze_repositories_dag():
                                 text=True,
                                 shell=True,
                             )
-                            print(f"remove the file: {result}")
+                            # print(f"removed the file: {result}")
                             continue
 
-            if any(["JavaScript", "TypeScript"] in repo_info["languages_full_list"].keys()):
-                print("==>> JavaScript or TypeScript")
+            # Extracting JavaScript packages
+            if any(
+                language in repo_info["languages_full_list"].keys()
+                for language in ["JavaScript", "TypeScript"]
+            ):
                 # find package.json file from the repo
                 package_json_files = []
                 for root, dirs, files in os.walk(target_dir):
@@ -318,17 +315,18 @@ def analyze_repositories_dag():
                         package_json = json.load(f)
                         if "dependencies" in package_json:
                             packages.extend(package_json["dependencies"].keys())
-
+                packages = [package.replace("@", "") for package in packages]
+                print("JavaScript packages: ", packages)
                 repo_info["packages_used"] += ", ".join(packages)
 
+            # remove cloned repo and requirement dir
             result = subprocess.run(
-                "rm -rf " + target_dir,
+                "rm -rf " + target_dir + "&& rm -rf " + requirement_dir,
                 capture_output=True,
                 check=True,
                 text=True,
                 shell=True,
             )
-            print(f"remove cloned repo {target_dir}: {result}")
 
         context["ti"].xcom_push(key="repo_infos", value=repo_infos)
 
@@ -336,6 +334,9 @@ def analyze_repositories_dag():
     def update_db(**context):
         print("==> update_db")
         repo_infos = context["ti"].xcom_pull(key="repo_infos")
+
+        for repo_info in repo_infos:
+            repo_info["fetched_full_info_at"] = pendulum.now().to_datetime_string()
 
         hook = PostgresHook(postgres_conn_id=Variable.get("POSTGRES_CONN_ID"))
         connection = hook.get_conn()
@@ -353,15 +354,15 @@ def analyze_repositories_dag():
 
         connection.commit()
 
-    # trigger_analyze_repositories_dag = TriggerDagRunOperator(
-    #     logical_date=(
-    #         pendulum.parse(Variable.get(f"github__api_reset_utc_dt"))
-    #         if Variable.get(f"github__api_reset_utc_dt", None)
-    #         else pendulum.now()
-    #     ),
-    #     task_id="trigger_analyze_repositories_dag",
-    #     trigger_dag_id="analyze_repositories_dag",
-    # )
+    trigger_self_dag = TriggerDagRunOperator(
+        logical_date=(
+            pendulum.parse(Variable.get(f"github__api_reset_utc_dt"))
+            if Variable.get(f"github__api_reset_utc_dt", None)
+            else pendulum.now()
+        ),
+        task_id="trigger_self_dag",
+        trigger_dag_id="fetch_full_repositories_dag",
+    )
 
     end_task = EmptyOperator(task_id="end")
 
@@ -375,10 +376,10 @@ def analyze_repositories_dag():
         >> get_full_list_of_languages()
         >> get_packages_used()
         >> update_db()
-        >> end_task
+        >> trigger_self_dag
     )
 
     get_repo_info_task >> end_task
 
 
-analyze_repositories_dag()
+fetch_full_repositories_dag()

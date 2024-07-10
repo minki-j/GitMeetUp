@@ -1,3 +1,4 @@
+import json
 import logging
 from dags.schemas.github_user_schema import GITHUB_USER_SCHEMA, GITHUB_REPO_SCHEMA
 
@@ -99,6 +100,9 @@ def insert_data(cursor, data: list[dict], table_name):
             continue
         columns = element.keys()
         values = [element[column] for column in columns]
+
+        # convert to json is value is a dictionary
+        values = [json.dumps(value) if isinstance(value, dict) else value for value in values]
 
         placeholders = ", ".join(
             ["%s"] * len(values)

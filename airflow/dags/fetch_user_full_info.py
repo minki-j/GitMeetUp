@@ -118,22 +118,30 @@ def fetch_user_full_info_dag():
         is_finished = is_finished_str == "True"
 
         if is_finished:
-            print("==>> Filter is done, branching to end")
-            return "end"
-        print("==>> Filter is not done, continuing the downstream tasks")
-        return "trigger_fetch_user_full_info_dag"
+            print("==>> Filter is done, trigger the nextdag")
+            return "trigger_fetch_repositories_dag"
+        print("==>> Filter is not done, lopping the current dag")
+        return "trigger_self_dag"
 
-    trigger_fetch_user_full_info_dag = TriggerDagRunOperator(
+    trigger_self_dag = TriggerDagRunOperator(
         logical_date=(
             pendulum.parse(Variable.get(f"github_api_reset_utc_dt"))
             if Variable.get(f"github_api_reset_utc_dt", None)
             else pendulum.now()
         ),
-        task_id="trigger_fetch_user_full_info_dag",
+        task_id="trigger_self_dag",
         trigger_dag_id="fetch_user_full_info_dag",
     )
 
-    end_task = EmptyOperator(task_id="end")
+    trigger_fetch_repositories_dag = TriggerDagRunOperator(
+        logical_date=(
+            pendulum.parse(Variable.get(f"github_api_reset_utc_dt"))
+            if Variable.get(f"github_api_reset_utc_dt", None)
+            else pendulum.now()
+        ),
+        task_id="trigger_fetch_repositories_dag",
+        trigger_dag_id="fetch_repositories_dag",
+    )
 
     fetch_unprocessed_user_urls_task = get_urls()
     fetch_user_url_task = fetch_user_url(fetch_unprocessed_user_urls_task)
@@ -146,9 +154,9 @@ def fetch_user_full_info_dag():
         >> fetch_user_url_task
         >> update_db_task
         >> is_finished_task
-        >> trigger_fetch_user_full_info_dag
+        >> trigger_self_dag
     )
-    is_finished_task >> end_task
+    is_finished_task >> trigger_fetch_repositories_dag
 
 
 fetch_user_full_info_dag()
