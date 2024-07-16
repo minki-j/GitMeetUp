@@ -11,7 +11,7 @@ from airflow.models import Variable
 from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 
-from include.github_api_call.fetch_users import fetch_github_acocunts_by_date_location
+from include.github_api_call.functions import fetch_github_accounts_by_date_location
 from include.utils.date_utils import generate_date_intervals
 from include.utils.sql_functions import create_or_update_table, insert_data
 
@@ -50,8 +50,9 @@ def search_users_by_location_dag(location: str = "montreal"):
                 accounts_in_date,
                 overflowed_date,
                 reached_rate_limit,
+                remaining_rate_limit,
                 rate_limit_reset_time,
-            ) = fetch_github_acocunts_by_date_location(location, date)
+            ) = fetch_github_accounts_by_date_location(location, date)
 
             if accounts_in_date:
                 accounts.extend(accounts_in_date)
@@ -94,7 +95,7 @@ def search_users_by_location_dag(location: str = "montreal"):
         print(
             f"processed {next_query_date_idx - 1} out of {len(dates)} / until {dates[next_query_date_idx - 1]}"
         )
-        print(f"collected user: {len(accounts)}")
+        print(f"collected user: {len(accounts)} / remaining rate limit: {remaining_rate_limit}")
 
         return accounts
 

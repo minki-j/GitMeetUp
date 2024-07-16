@@ -1,0 +1,6 @@
+apache-airflow
+pandas
+pendulum
+psycopg2_binary
+pytest
+Requests

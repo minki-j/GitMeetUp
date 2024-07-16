@@ -55,23 +55,40 @@ def create_or_update_table(cursor, data: list[dict], table_name: str):
     # otherwise, set the first column as primary key
     primary_key = "id" if "id" in data[0].keys() else data[0].keys()[0]
 
+    match table_name:
+        case "github_accounts":
+            foreign_key_statement = ""
+        case "github_repositories":
+            foreign_key_statement = (
+                ", FOREIGN KEY (user_id) REFERENCES github_accounts(id)"
+            )
+        case "github_commits":
+            foreign_key_statement = (
+                ", FOREIGN KEY (repository_id) REFERENCES github_repositories(id)"
+            )
+        case _:
+            foreign_key_statement = ""
+
     # Deprecated version
-    # create_table_query = f"CREATE TABLE IF NOT EXISTS {table_name} ({column_definitions}, PRIMARY KEY ({primary_key}));"
+    create_table_query = f"CREATE TABLE IF NOT EXISTS {table_name} ({column_definitions}, PRIMARY KEY ({primary_key}));"
 
     # TODO: This query needed to be tested!
-    create_table_query = f"""
-CREATE TABLE IF NOT EXISTS {table_name} (
-    {column_definitions}, 
-    PRIMARY KEY ({primary_key})
-    {"" if table_name == "github_accounts" else ", FOREIGN KEY (user_id) REFERENCES github_accounts(id)"}
-);
-"""
+    #     create_table_query = f"""
+    # CREATE TABLE IF NOT EXISTS {table_name} (
+    #     {column_definitions},
+    #     PRIMARY KEY ({primary_key})
+    #     {foreign_key_statement}
+    # );
+    # """
 
     try:
+        print(create_table_query)
         cursor.execute(create_table_query)
         logging.info(f"Table '{table_name}' created or already exists.")
     except Exception as e:
-        raise Exception(f"Failed to create table '{table_name}'. Query: {create_table_query}") from e
+        raise Exception(
+            f"Failed to create table '{table_name}'. Query: {create_table_query}"
+        ) from e
 
     # Check for new columns and add them
     existing_columns = get_existing_columns(cursor, table_name)
@@ -87,14 +104,13 @@ CREATE TABLE IF NOT EXISTS {table_name} (
         logging.info("No new columns to add.")
 
 
-def insert_data(cursor, data: list[dict], table_name):
+def insert_data(cursor, data: list[dict], table_name, primary_key="id"):
     if not data or len(data) == 0:
         logging.warning("data is empty. No data inserted.")
         return
 
-    primary_key = "id" if "id" in data[0].keys() else data[0].keys()[0]
-
     for i, element in enumerate(data):
+
         if not isinstance(element, dict):
             logging.error("not dictionary element at ", i, ", ", element)
             continue
@@ -102,11 +118,11 @@ def insert_data(cursor, data: list[dict], table_name):
         values = [element[column] for column in columns]
 
         # convert to json is value is a dictionary
-        values = [json.dumps(value) if isinstance(value, dict) else value for value in values]
+        values = [
+            json.dumps(value) if isinstance(value, dict) else value for value in values
+        ]
 
-        placeholders = ", ".join(
-            ["%s"] * len(values)
-        ) 
+        placeholders = ", ".join(["%s"] * len(values))
         update_str = ", ".join(
             [f"{col} = EXCLUDED.{col}" for col in columns if col != primary_key]
         )
@@ -120,8 +136,9 @@ def insert_data(cursor, data: list[dict], table_name):
         try:
             cursor.execute(insert_query, values)
         except Exception as e:
-            logging.error(f"Error inserting data: {e}")
-            logging.error(f"Query: {values}")
+            logging.error(f"on inserting data: {e}")
+            logging.error(f"↳ values: {values}")
+            logging.error(f"↳ query: {insert_query}")
             return
 
 
@@ -129,7 +146,7 @@ def select_data_with_condition(
     cursor, table_name: str, select_condition, where_condition: str, limit: int = None
 ):
     query = f"SELECT {select_condition} FROM {table_name} {'WHERE ' + where_condition if where_condition else ''} {'LIMIT ' + str(limit) if limit else ''};"
-    print(f"==>> query: {query}")
+
     try:
         cursor.execute(query)
     except Exception as e:
@@ -253,3 +270,43 @@ WHERE {identifier} IN ({ids_placeholders})
         return None
 
     return
+
+
+def create_document_table(cursor, table_name: str):
+
+    query = f"""
+CREATE TABLE IF NOT EXISTS {table_name} (
+    id SERIAL PRIMARY KEY,
+    repo_id INT,
+    data JSONB,
+    FOREIGN KEY (repo_id) REFERENCES github_repositories(id) ON DELETE CASCADE
+);
+"""
+    try:
+        cursor.execute(query)
+        logging.info(f"Table '{table_name}' created or already exists.")
+    except Exception as e:
+        raise Exception(
+            f"Failed to create table '{table_name}'. Query: {query} from {e}"
+        )
+
+
+def insert_document(cursor, table_name: str, repo_id: int, documents: list[dict]):
+    for document in documents:
+        query = f"""
+            INSERT INTO {table_name} (repo_id, data)
+            VALUES (%s, %s);
+            """
+        try:
+            cursor.execute(
+                query,
+                (
+                    repo_id,
+                    json.dumps(document),
+                ),
+            )
+        except Exception as e:
+            logging.error(f"on inserting document: {e}")
+            logging.error(f"↳ values: {document}")
+            logging.error(f"↳ query: {query}")
+            return

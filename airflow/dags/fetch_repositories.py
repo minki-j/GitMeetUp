@@ -71,7 +71,7 @@ def fetch_repositories_dag():
         print(f"==> Fetching repositories")
 
         repo_urls = context["ti"].xcom_pull(key="repo_urls")
-        
+
         result = []
         index = 0
         for user_id, url in repo_urls:
@@ -98,7 +98,8 @@ def fetch_repositories_dag():
                         value = repo.pop(key)
                         # print("Excluded nested item. Key/value:\n", key, " / ", value)
             else:
-                repositories = [{}]
+                print(f"==> Failed to fetch repositories: {url}")
+                continue
 
             for repo in repositories:
                 repo["user_id"] = user_id
