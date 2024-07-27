@@ -1,9 +1,61 @@
-from dotenv import load_dotenv
-load_dotenv(dotenv_path='./.env')
+import json
+from varname import nameof as n
 
-from include.llm_analysis.main_graph import langgraph_app
-result = langgraph_app.invoke(
-    {
+# from ..state_schema import State
+
+from langchain.retrievers import EnsembleRetriever
+from langchain_community.retrievers import BM25Retriever
+from langchain_community.vectorstores import FAISS
+from langchain_openai import OpenAIEmbeddings
+from langchain.document_loaders import DirectoryLoader, TextLoader
+
+
+def retrieve_code_snippets(state):
+    # hypothesis_json = state["messages"][-1]
+    # # hypothesis_dict = json.loads(hypothesis_json)
+    # # hypothesis = hypothesis_dict["hypothesis"]
+    # root_path = state["repo_root_path"]
+
+    document_path = (
+        "/Users/minkijung/Documents/2PetProjects/ernest/backend/app/langchain"
+    )
+    loader = DirectoryLoader(
+        document_path, glob=["*.md", "*.py"], loader_cls=TextLoader, recursive=True
+    )
+    documents = loader.load()
+    print(f"==>> Total document loaded: {len(documents)}")
+
+    if not documents:
+        print("No documents found in the specified directory.")
+        raise Exception("No documents found in the specified directory.")
+
+    bm25_retriever = BM25Retriever.from_documents(documents)
+
+    bm25_retriever.k = 2
+
+    embedding = OpenAIEmbeddings()
+    faiss_vectorstore = FAISS.from_documents(documents, embedding)
+    faiss_retriever = faiss_vectorstore.as_retriever(search_kwargs={"k": 2})
+
+    # initialize the ensemble retriever
+    ensemble_retriever = EnsembleRetriever(
+        retrievers=[bm25_retriever, faiss_retriever], weights=[0.5, 0.5]
+    )
+
+    docs = ensemble_retriever.invoke("The code snippets that implement conversation flow logic")
+    print(f"==>> docs: {docs}")
+
+    return state
+
+
+# run the function here
+if __name__ == "__main__":
+    state = {
+        "messages": [
+            {
+                "hypothesis": "The Ernest project is an advanced AI-powered conversational system that leverages state-of-the-art technologies to provide personalized interactions and review analysis. The system architecture integrates"
+            }
+        ],
         "title": "Ernest",
         "repo_root_path": "/Users/minkijung/Documents/2PetProjects/ernest",
         "repo_description": "An AI-Powered Review Platform That Gathers Information Through Conversations",
@@ -476,9 +528,6 @@ result = langgraph_app.invoke(
         "steps": [],
         "analysis_results": [],
         "validate_count": 0,
-    },
-    {"recursion_limit": 100},
-)
-
-with open("hypothesis_result.txt", "w") as f:
-    f.write("\n".join(result["final_hypotheses"]))
+    }
+    state = retrieve_code_snippets(state)
+    print(f"==>> Updated state: {state}")

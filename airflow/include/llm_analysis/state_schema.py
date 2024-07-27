@@ -4,21 +4,33 @@ from langchain_core.messages import BaseMessage
 
 
 class State(TypedDict):
-
     @staticmethod
-    def append_list(
-        attribute_instance: List[dict], new_result: List[dict]
-    ) -> List[dict]:
-        attribute_instance.extend(new_result)
-
+    def merge_lists(attribute_instance: List, new_result: List) -> List:
+        for item in new_result:
+            if item not in attribute_instance:
+                attribute_instance.append(item)
         return attribute_instance
 
     title: str
     repo_root_path: str
-    repo_description: str
+    repo_description_by_user: str
     directory_tree: str
     packages_used: List[str]
-    steps: Annotated[List[str], append_list]
-    analysis_results: Annotated[List[dict], append_list]
+
     messages: Annotated[Sequence[BaseMessage], add_messages]
-    read_file: str
+
+    opened_files: dict[str, str] = {}
+
+    invalid_paths: List[str] = []
+    valid_paths: Annotated[List[str], merge_lists] = []
+    corrected_paths: List[str] = []
+    validate_count: int = 0
+
+    analysis_results: Annotated[List[dict], merge_lists] = []
+    final_hypotheses: Annotated[List[str], merge_lists] = []
+
+    def __init__(self):
+        self.analysis_results = []
+        self.valid_paths = []
+        self.corrected_paths = []
+        self.invalid_paths = []

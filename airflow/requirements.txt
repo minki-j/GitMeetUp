@@ -4,3 +4,5 @@ pendulum
 psycopg2_binary
 pytest
 Requests
+langgraph
+varname

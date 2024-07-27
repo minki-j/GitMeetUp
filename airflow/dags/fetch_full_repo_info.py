@@ -100,6 +100,12 @@ def fetch_full_repositories_dag():
             task_ids="get_column_names_for_repositories"
         )
         repo_infos = context["ti"].xcom_pull(key="repo_infos")
+        # Manually fetch repositories
+        # repo_infos = [{
+        #     "commits_url": "https://api.github.com/repos/minki-j/GitMeetUp/commits{/sha}",
+        #     "id": 816994095,
+        #     "full_name": "minki-j/GitMeetUp",
+        # }]
 
         index = 0
         hook = PostgresHook(postgres_conn_id=Variable.get("POSTGRES_CONN_ID"))
@@ -397,15 +403,15 @@ def fetch_full_repositories_dag():
 
         connection.commit()
 
-    trigger_self_dag = TriggerDagRunOperator(
-        logical_date=(
-            pendulum.parse(Variable.get(f"github__api_reset_utc_dt"))
-            if Variable.get(f"github__api_reset_utc_dt", None)
-            else pendulum.now()
-        ),
-        task_id="trigger_self_dag",
-        trigger_dag_id="fetch_full_repositories_dag",
-    )
+    # trigger_self_dag = TriggerDagRunOperator(
+    #     logical_date=(
+    #         pendulum.parse(Variable.get(f"github__api_reset_utc_dt"))
+    #         if Variable.get(f"github__api_reset_utc_dt", None)
+    #         else pendulum.now()
+    #     ),
+    #     task_id="trigger_self_dag",
+    #     trigger_dag_id="fetch_full_repositories_dag",
+    # )
 
     end_task = EmptyOperator(task_id="end")
 
@@ -419,7 +425,7 @@ def fetch_full_repositories_dag():
         # >> get_full_list_of_languages()
         # >> get_packages_used()
         # >> update_db()
-        >> trigger_self_dag
+        # >> trigger_self_dag
     )
 
     get_repo_info_task >> end_task
