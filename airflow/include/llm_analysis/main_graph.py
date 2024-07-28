@@ -29,28 +29,10 @@ g.set_entry_point("entry")
 g.add_edge("entry", n(agent_hypothesis))
 
 g.add_node(n(agent_hypothesis), agent_hypothesis)
-g.add_edge(n(agent_hypothesis), n(validate_file_paths))
-
-g.add_node(n(validate_file_paths), validate_file_paths)
-g.add_conditional_edges(
-    n(validate_file_paths),
-    lambda state: (
-        n(correct_file_paths)
-        if len(state["invalid_paths"]) > 0 and state["validate_count"] < 3
-        else n(retrieve_code_snippets)
-    ),
-    to_path_map([n(correct_file_paths), n(retrieve_code_snippets)]),
-)
-
-g.add_node(n(correct_file_paths), correct_file_paths)
-g.add_edge(n(correct_file_paths), n(validate_file_paths))
+g.add_edge(n(agent_hypothesis), n(retrieve_code_snippets))
 
 g.add_node(n(retrieve_code_snippets), retrieve_code_snippets)
-g.add_edge(n(retrieve_code_snippets), n(read_files))
-
-g.add_node(n(read_files), read_files)
-g.add_edge(n(read_files), n(agent_confirmation))
-
+g.add_edge(n(retrieve_code_snippets), n(agent_confirmation))
 
 g.add_node(n(agent_confirmation), agent_confirmation)
 g.add_edge(n(agent_confirmation), n(update_hypothesis_with_confirmation))

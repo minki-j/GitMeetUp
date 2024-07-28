@@ -5,7 +5,7 @@ from include.llm_analysis.main_graph import langgraph_app
 result = langgraph_app.invoke(
     {
         "title": "Ernest",
-        "repo_root_path": "/Users/minkijung/Documents/2PetProjects/ernest",
+        "repo_root_path": "/Users/minkijung/Documents/2PetProjects/ernest/backend/app/langchain",
         "repo_description": "An AI-Powered Review Platform That Gathers Information Through Conversations",
         "packages_used": [
             "datasets",

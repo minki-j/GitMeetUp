@@ -17,20 +17,20 @@ from ..common import llm, chat_model, output_parser
 from ..tools import tools
 
 from langchain_core.pydantic_v1 import BaseModel, Field
+from typing import List
 from langchain_core.tools import tool
 from langchain_core.runnables import Runnable, RunnableConfig, RunnableLambda
 
 
 class Hypothesis(BaseModel):
     """This is a Hypothesis of the repository. You must follow the order below when generating the properties
-    1. rationale 2. hypothesis 3. file_paths"""
+    1. rationale 2. hypothesis 3.queries_for_code_retrieval"""
 
-    file_paths: list[str] = Field(
-        default_factory=list,
-        description="List of file paths to examine. Should only contain paths to individual files, not directories. Also, don't pick jupyter notebooks!",
-    )
+    rationale: str = Field(description="The reason for the hypothesis and the queries to retreive codes for confirmation")
     hypothesis: str
-    rationale: str
+    queries: List[str] = Field(
+        description="A list of search queries used to retrieve relevant code snippets. These snippets will be used to verify the hypothesis. The retrieval process combines BM25 and embedding vector search techniques for improved accuracy. Order the queries from most imporant to least important."
+    )
 
 
 def agent_hypothesis(state: State):
@@ -39,7 +39,7 @@ def agent_hypothesis(state: State):
     system_message = SystemMessage(
         content="""
         You are a sesoned software engineer tasked to understand the provided repository. It includes meta data such as title, description, directory tree, and packages used. 
-        Based on the information, make a hypothesis about the project and file pathes that you need to look into to confirm that hypothesis.
+        Based on the information, make a hypothesis about the project and queries that could be used to retrieve relevant code snippets to validate your hypothesis. The queries are english sentences that describe functionality or patterns in the code that you need to look at to confirm the hypothesis. For example, if your hypothsis includes "this repo contains third partry authentications, then queries could be "code for third party authentication", "login with google" etc.
         """
     )
 
@@ -87,7 +87,7 @@ def agent_confirmation(state: State):
         Hypothesis: {hypothesis}
         Rationale: {rationale}
         Files to refer:
-        {opened_files}
+        {retrieved_code_snippets}
         """
     )
 
@@ -97,7 +97,7 @@ def agent_confirmation(state: State):
         {
             "rationale": hypothesis_dict["rationale"],
             "hypothesis": hypothesis_dict["hypothesis"],
-            "opened_files": json.dumps(state["opened_files"], indent=2),
+            "retrieved_code_snippets": state["retrieved_code_snippets"],
         }
     )
 

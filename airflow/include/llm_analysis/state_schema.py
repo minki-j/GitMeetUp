@@ -29,6 +29,8 @@ class State(TypedDict):
     analysis_results: Annotated[List[dict], merge_lists] = []
     final_hypotheses: Annotated[List[str], merge_lists] = []
 
+    retrieved_code_snippets: str
+
     def __init__(self):
         self.analysis_results = []
         self.valid_paths = []

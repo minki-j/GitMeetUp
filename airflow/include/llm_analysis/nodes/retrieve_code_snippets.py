@@ -22,14 +22,14 @@ from ..state_schema import State
 
 def retrieve_code_snippets(state: State):
     hypothesis_json = state["messages"][-1]
-    hypothesis_dict = json.loads(hypothesis_json)
-    hypothesis = hypothesis_dict["hypothesis"]
-    print(f"==>> hypothesis: {hypothesis}")
+    hypothesis_dict = json.loads(hypothesis_json.content)
+    queries = hypothesis_dict["queries"][:3] #! only use top 3 queries for now
     root_path = state["repo_root_path"]
 
-    #TODO: Cache documents
+    # TODO: Cache documents
+
     # Load and split documents
-    document_path = "/Users/minkijung/Documents/2PetProjects/ernest/backend/app/langchain/conditional_edges/llm"
+    document_path = root_path
     loader = DirectoryLoader(
         document_path, glob=["*.md", "*.py"], loader_cls=TextLoader, recursive=True
     )
@@ -45,32 +45,31 @@ def retrieve_code_snippets(state: State):
         language=Language.PYTHON,
         chunk_size=200,
         chunk_overlap=0,
-        keep_separator="end",
-        strip_whitespace=False
+        keep_separator=True,
+        strip_whitespace=False,
     )
     documents = python_splitter.split_documents(documents)
 
-    use_cache = False
-    if not use_cache:
+    embedding_path = f"./embedding_cache/{state['title']}.pkl"
+
+    if not os.path.exists(embedding_path):
         openAIEmbedding = OpenAIEmbeddings()
         embeddings = openAIEmbedding.embed_documents(
-                [document.page_content for document in documents]
-            )
+            [document.page_content for document in documents]
+        )
 
         # Save embeddings to a local file
-        embedding_file = "embeddings.pkl"
-        with open(embedding_file, "wb") as f:
+        with open(embedding_path, "wb") as f:
             pickle.dump(embeddings, f)
-        print(f"Embeddings saved to {embedding_file}")
+        print(f"Embeddings saved to {embedding_path}")
     else:
         # Load embeddings from the local file
-        embedding_file = "embeddings.pkl"
-        if os.path.exists(embedding_file):
-            with open(embedding_file, "rb") as f:
+        if os.path.exists(embedding_path):
+            with open(embedding_path, "rb") as f:
                 embeddings = pickle.load(f)
-            print(f"Embeddings loaded from {embedding_file}")
+            print(f"Embeddings loaded from {embedding_path}")
         else:
-            print(f"Embedding file {embedding_file} not found.")
+            print(f"Embedding file {embedding_path} not found.")
 
     print(f"Number of loaded embeddings: {len(embeddings)}")
 
@@ -88,8 +87,8 @@ def retrieve_code_snippets(state: State):
     cosine_similarities = []
     for source, docs_in_same_source in documents_by_source.items():
         cosine_similarities_per_source = {"source": source, "similarities": []}
-        print(f"Source: {source}")
-        print(f"Number of docs_in_same_source: {len(docs_in_same_source)}")
+        # print(f"Source: {source}")
+        # print(f"Number of docs_in_same_source: {len(docs_in_same_source)}")
         for i in range(len(docs_in_same_source) - 1):
             cosine_similarity_result = cosine_similarity(
                 [docs_in_same_source[i]["embedding"]],
@@ -126,30 +125,39 @@ def retrieve_code_snippets(state: State):
                 else:
                     merged_chunk += document[idx + 1]["content"]
             else:
-                documents_after_semantic_merging.append(Document(merged_chunk, metadata={"source": source}))
+                documents_after_semantic_merging.append(
+                    Document(merged_chunk, metadata={"source": source})
+                )
 
-    print(f"documents_after_semantic_merging: {len(documents_after_semantic_merging)}")
-    print(f"documents_after_semantic_merging: {documents_after_semantic_merging}")
+    # print(f"documents_after_semantic_merging: {len(documents_after_semantic_merging)}")
+    # print(f"documents_after_semantic_merging: {documents_after_semantic_merging}")
 
     # BM25
     bm25_retriever = BM25Retriever.from_documents(documents_after_semantic_merging)
-    bm25_retriever.k = 1
+    bm25_retriever.k = 2
 
     # FAISS
     embedding = OpenAIEmbeddings()
     faiss_vectorstore = FAISS.from_documents(
         documents_after_semantic_merging, embedding
     )
-    faiss_retriever = faiss_vectorstore.as_retriever(search_kwargs={"k": 1})
+    faiss_retriever = faiss_vectorstore.as_retriever(search_kwargs={"k": 2})
 
     ensemble_retriever = EnsembleRetriever(
         retrievers=[bm25_retriever, faiss_retriever], weights=[0.5, 0.5]
     )
+    retrieved_code_snippets = []
+    for query in queries:
+        result = ensemble_retriever.invoke(query)
+        retrieved_code_snippets.extend(result)
 
-    docs = ensemble_retriever.invoke("Check if the message is cutoff")
-    for doc in docs:
-        print("------------RESULT-------------")
-        print(doc.metadata["source"])
-        print(doc.page_content)
+    print(f"Retrieved {len(retrieved_code_snippets)} code snippets")
 
-    return
+    formatted_snippets = [
+        f"{document.metadata['source']}:\n{document.page_content}"
+        for document in retrieved_code_snippets
+    ]
+
+    return {
+        "retrieved_code_snippets": "\n\n\n".join(formatted_snippets)
+    }
