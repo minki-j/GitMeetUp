@@ -20,6 +20,7 @@ from .nodes.read_files import read_files
 from .nodes.have_enough_hypotheses import have_enough_hypotheses
 from .nodes.file_path_validation import validate_file_paths, correct_file_paths
 from .nodes.find_next_hypothesis import find_next_hypothesis
+from .nodes.retrieve_code_snippets import retrieve_code_snippets
 
 g = StateGraph(State)
 g.add_node("entry", RunnablePassthrough())
@@ -38,7 +39,7 @@ g.add_conditional_edges(
         if len(state["invalid_paths"]) > 0 and state["validate_count"] < 3
         else n(retrieve_code_snippets)
     ),
-    to_path_map([n(correct_file_paths), n(read_files)]),
+    to_path_map([n(correct_file_paths), n(retrieve_code_snippets)]),
 )
 
 g.add_node(n(correct_file_paths), correct_file_paths)
