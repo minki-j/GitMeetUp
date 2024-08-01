@@ -19,7 +19,7 @@ from include.utils.sql_functions import (
     select_data_with_condition,
     create_or_update_table,
     insert_data,
-    create_document_table,
+    create_document_table_with_repo_id_as_fk,
     insert_document,
 )
 from include.github_api_call.request import github_api_request
@@ -147,7 +147,7 @@ def fetch_full_repositories_dag():
                     for commit in commits
                 ]
                 if "fetched_full_info_at" not in existing_columns:
-                    create_document_table(cursor, "github_commits")
+                    create_document_table_with_repo_id_as_fk(cursor, "github_commits")
                 insert_document(cursor, "github_commits", repo_info["id"], commits)
 
                 #! REMOVE THIS AFTER FETCHING COMMIT SHA

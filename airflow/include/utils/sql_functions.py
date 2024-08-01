@@ -272,7 +272,7 @@ WHERE {identifier} IN ({ids_placeholders})
     return
 
 
-def create_document_table(cursor, table_name: str):
+def create_document_table_with_repo_id_as_fk(cursor, table_name: str):
 
     query = f"""
 CREATE TABLE IF NOT EXISTS {table_name} (

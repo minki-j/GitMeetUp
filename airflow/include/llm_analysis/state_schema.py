@@ -16,6 +16,7 @@ class State(TypedDict):
     repo_description_by_user: str
     directory_tree: str
     packages_used: List[str]
+    clone_url: str
 
     messages: Annotated[Sequence[BaseMessage], add_messages]
 

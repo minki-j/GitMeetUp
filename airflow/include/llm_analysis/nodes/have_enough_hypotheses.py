@@ -9,7 +9,7 @@ def have_enough_hypotheses(state: State) -> bool:
 
     print(f"collected {len(hypotheses)} hypotheses so far")
 
-    if len(hypotheses) >= 10:
+    if len(hypotheses) >= 2:
         return "__end__"
     else:
         return "find_next_hypothesis"

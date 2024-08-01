@@ -6,3 +6,10 @@ pytest
 Requests
 langgraph
 varname
+langchain_core
+langchain_openai
+langchain_anthropic
+langchain_community
+scikit-learn
+rank_bm25
+faiss-cpu

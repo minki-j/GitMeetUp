@@ -1,7 +1,7 @@
 import os
 
 from langchain_core.tools import tool
-from langchain_community.tools.tavily_search import TavilySearchResults
+# from langchain_community.tools.tavily_search import TavilySearchResults
 
 
 @tool
@@ -17,7 +17,7 @@ def read_a_file(path: str):
     with open(full_path, "r") as f:
         return f.read()
 
-tavily_search = TavilySearchResults(max_results=2)
+# tavily_search = TavilySearchResults(max_results=2)
 
 
-tools = [read_a_file, tavily_search]
+tools = [read_a_file]

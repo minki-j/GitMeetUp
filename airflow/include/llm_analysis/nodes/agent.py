@@ -13,7 +13,7 @@ from langchain_core.messages import (
 )
 from ..state_schema import State
 
-from ..common import llm, chat_model, output_parser
+from ..common import chat_model, output_parser
 from ..tools import tools
 
 from langchain_core.pydantic_v1 import BaseModel, Field
@@ -33,8 +33,8 @@ class Hypothesis(BaseModel):
     )
 
 
-def agent_hypothesis(state: State):
-    print("==>> agent_hypothesis node started")
+def hypothesis(state: State):
+    print("==>> hypothesis node started")
 
     system_message = SystemMessage(
         content="""
@@ -64,8 +64,8 @@ def agent_hypothesis(state: State):
     return {"messages": [AIMessage(content=response_json)]}
 
 
-def agent_confirmation(state: State):
-    print("==>> agent_confirmation node started")
+def confirmation(state: State):
+    print("==>> confirmation node started")
 
     hypothesis_json = state["messages"][-1]
     hypothesis_dict = json.loads(hypothesis_json.content)

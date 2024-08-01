@@ -3,7 +3,7 @@ import json
 
 from ..state_schema import State
 
-from ..common import llm, chat_model, output_parser
+from ..common import chat_model, output_parser
 from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 
