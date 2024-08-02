@@ -475,6 +475,7 @@ result = langgraph_app.invoke(
 """,
         "steps": [],
         "analysis_results": [],
+        "final_hypotheses": [],
         "validate_count": 0,
     },
     {"recursion_limit": 100},

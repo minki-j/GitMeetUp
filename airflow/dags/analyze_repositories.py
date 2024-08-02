@@ -40,7 +40,7 @@ def analyze_repositories_dag():
     def get_repositories():
         columns = [
             "id",
-            "full_name",
+            "name",
             "commits_url",
             "description",
             "packages_used",
@@ -82,6 +82,15 @@ def analyze_repositories_dag():
         # remove the directory if it already exists
         result = subprocess.run(
             "rm -rf " + target_dir,
+            capture_output=True,
+            check=True,
+            text=True,
+            shell=True,
+        )
+
+        #remove cache
+        result = subprocess.run(
+            "rm -rf ./cache/*",
             capture_output=True,
             check=True,
             text=True,

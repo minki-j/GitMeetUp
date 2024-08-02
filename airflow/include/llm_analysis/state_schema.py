@@ -26,7 +26,7 @@ class State(TypedDict):
     valid_paths: Annotated[List[str], merge_lists] = []
     corrected_paths: List[str] = []
     validate_count: int = 0
-
+    
     analysis_results: Annotated[List[dict], merge_lists] = []
     final_hypotheses: Annotated[List[str], merge_lists] = []
 

@@ -3,7 +3,7 @@ from ..state_schema import State
 import json
 
 
-def read_files(state: State):
+def read_files_suggested_by_LLM(state: State):
 
     root_path = state["repo_root_path"]
     valid_paths = state["valid_paths"]

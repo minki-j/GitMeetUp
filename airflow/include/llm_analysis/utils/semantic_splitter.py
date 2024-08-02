@@ -10,8 +10,9 @@ from langchain_core.documents.base import Document
 from sklearn.metrics.pairwise import cosine_similarity
 
 
-def semantic_code_splitter(root_path):
-
+def semantic_code_splitter(root_path, embedding_max_length=8191):
+    # Average length of string per token = 4.35 - 5.00
+    embedding_max_length_for_string = embedding_max_length * 4
     document_path = root_path
     loader = DirectoryLoader(
         document_path,
@@ -25,7 +26,7 @@ def semantic_code_splitter(root_path):
         print("No documents found in the specified directory.")
         raise Exception("No documents found in the specified directory.")
 
-    # Seperators: ['\nclass ', '\ndef ', '\n\tdef ', '\n\n', '\n', ' ', '']
+    # Python Seperators: ['\nclass ', '\ndef ', '\n\tdef ', '\n\n', '\n', ' ', '']
     python_splitter = RecursiveCharacterTextSplitter.from_language(
         language=Language.PYTHON,
         chunk_size=200,
@@ -35,8 +36,8 @@ def semantic_code_splitter(root_path):
     )
     documents = python_splitter.split_documents(documents)
 
-    openAIEmbedding = OpenAIEmbeddings()
-    print("Embedding documents...")
+    openAIEmbedding = OpenAIEmbeddings(model="text-embedding-3-large")
+    print(f"Embedding {len(documents)} documents for semantic splitter...")
     embeddings = openAIEmbedding.embed_documents(
         [document.page_content for document in documents]
     )
@@ -55,8 +56,6 @@ def semantic_code_splitter(root_path):
     cosine_similarities = []
     for source, docs_in_same_source in documents_grouped_by_source.items():
         cosine_similarities_grouped_by_source = {"source": source, "similarities": []}
-        # print(f"Source: {source}")
-        # print(f"Number of docs_in_same_source: {len(docs_in_same_source)}")
         for i in range(len(docs_in_same_source) - 1):
             cosine_similarity_result = cosine_similarity(
                 [docs_in_same_source[i]["embedding"]],
@@ -91,6 +90,12 @@ def semantic_code_splitter(root_path):
                     merged_chunk = (
                         document[idx]["content"] + document[idx + 1]["content"]
                     )
+                if len(merged_chunk) > embedding_max_length_for_string:
+                    print("Merged chunk length exceeds the limit at ", source)
+                    documents_after_semantic_merging.append(
+                        Document(merged_chunk, metadata={"source": source})
+                    )
+                    merged_chunk = ""
                 else:
                     merged_chunk += document[idx + 1]["content"]
             else:
@@ -98,4 +103,4 @@ def semantic_code_splitter(root_path):
                     Document(merged_chunk, metadata={"source": source})
                 )
 
-    return embeddings, documents_after_semantic_merging
+    return documents_after_semantic_merging

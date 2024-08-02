@@ -7,7 +7,7 @@ from ..common import chat_model, output_parser
 from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 
-def validate_file_paths(state: State):
+def validate_file_paths_from_LLM(state: State):
     print("==>> file_path_validation node started")
     root_path = state["repo_root_path"]
 

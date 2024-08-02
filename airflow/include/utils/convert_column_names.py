@@ -6,7 +6,7 @@ import json
 def convert_postgres_to_state_schema(repo: dict) -> dict:
     convert_rule = {
         "id": "id",
-        "full_name": "title",
+        "name": "title",
         "description": "repo_description_by_user",
         "tree": "directory_tree",
         "packages_used": "packages_used",

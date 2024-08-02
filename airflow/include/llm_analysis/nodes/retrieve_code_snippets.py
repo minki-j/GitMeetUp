@@ -14,38 +14,40 @@ from ..state_schema import State
 from ..utils.semantic_splitter import semantic_code_splitter
 
 
-def retrieve_code_snippets(state: State):
+def retrieve_code_by_hybrid_search_with_queries(state: State):
     print("Retrieving code snippets for ", state["title"])
     hypothesis_json = state["messages"][-1]
     hypothesis_dict = json.loads(hypothesis_json.content)
-    queries = hypothesis_dict["queries"][:3] #! only use top 3 queries for now
+    queries = hypothesis_dict["queries"][:3]  #! only use top 3 queries for now
 
-    if os.path.exists(f"./cache/documents/{state['title'].replace('/', '_')}.pkl") and os.path.exists(f"./cache/embeddings/{state['title'].replace('/', '_')}.pkl"):
+    if os.path.exists(f"./cache/documents/{state['title']}.pkl") and os.path.exists(
+        f"./cache/faiss_vectorstore/{state['title']}.pkl"
+    ):
         print("Loading cached documents and embeddings")
-        with open(f"./cache/documents/{state['title'].replace('/', '_')}.pkl", "rb") as f:
+        with open(f"./cache/documents/{state['title']}.pkl", "rb") as f:
             documents = pickle.load(f)
-        with open(f"./cache/embeddings/{state['title'].replace('/', '_')}.pkl", "rb") as f:
-            embeddings = pickle.load(f)
+        embedding = OpenAIEmbeddings(model="text-embedding-3-large")
+        faiss_vectorstore = FAISS.load_local(
+            f"./cache/faiss_vectorstore/{state['title']}.pkl",
+            embedding,
+            allow_dangerous_deserialization=True,
+        )
     else:
-        embeddings, documents = semantic_code_splitter(state["repo_root_path"])
-        
+        documents = semantic_code_splitter(state["repo_root_path"])
+
         os.makedirs("./cache/documents", exist_ok=True)
-        with open(f"./cache/documents/{state['title'].replace('/', '_')}.pkl", "wb") as f:
+        with open(f"./cache/documents/{state['title']}.pkl", "wb") as f:
             pickle.dump(documents, f)
 
-        os.makedirs("./cache/embeddings", exist_ok=True)
-        with open(f"./cache/embeddings/{state['title'].replace('/', '_')}.pkl", "wb") as f:
-            pickle.dump(embeddings, f)
+        print(f"Creating FAISS vectorstore for {len(documents)} documents")
+        embedding = OpenAIEmbeddings(model="text-embedding-3-large")
+        faiss_vectorstore = FAISS.from_documents(documents, embedding)
 
-    # BM25
+        faiss_vectorstore.save_local(f"./cache/faiss_vectorstore/{state['title']}.pkl")
+
     bm25_retriever = BM25Retriever.from_documents(documents)
     bm25_retriever.k = 2
 
-    # FAISS
-    embedding = OpenAIEmbeddings()
-    faiss_vectorstore = FAISS.from_documents(
-        documents, embedding
-    )
     faiss_retriever = faiss_vectorstore.as_retriever(search_kwargs={"k": 2})
 
     ensemble_retriever = EnsembleRetriever(
@@ -64,5 +66,10 @@ def retrieve_code_snippets(state: State):
     ]
 
     return {
-        "retrieved_code_snippets": "\n\n\n".join(formatted_snippets)
+        "retrieved_code_snippets": {
+            "sources": [
+                document.metadata["source"] for document in retrieved_code_snippets
+            ],
+            "content": "\n\n------------\n\n".join(formatted_snippets),
+        }
     }
