@@ -1,7 +1,7 @@
 from langchain_core.output_parsers import StrOutputParser
 from langchain_openai import ChatOpenAI, OpenAI
 from langchain_core.runnables import ConfigurableField
-from airflow.models import Variable
+# from airflow.models import Variable
 
 
 output_parser = StrOutputParser()
@@ -35,10 +35,18 @@ output_parser = StrOutputParser()
 from langchain_anthropic import ChatAnthropic, Anthropic
 
 # chat_model = ChatAnthropic(model="claude-3-haiku-20240307")
+from dotenv import load_dotenv
+import os
 
+load_dotenv()
+
+env = os.environ
 chat_model = ChatAnthropic(
-    model="claude-3-5-sonnet-20240620", api_key=Variable.get("ANTHROPIC_API_KEY")
+    model="claude-3-5-sonnet-20240620", api_key=os.getenv("ANTHROPIC_API_KEY")
 )
+# chat_model = ChatAnthropic(
+#     model="claude-3-5-sonnet-20240620", api_key=Variable.get("ANTHROPIC_API_KEY")
+# )
 
 # llm = Anthropic(model="claude-3-haiku-20240307")
 

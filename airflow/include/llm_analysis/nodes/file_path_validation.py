@@ -15,9 +15,8 @@ def validate_file_paths_from_LLM(state: State):
         # If this node is recursively called, use corrected paths from correct_file_paths node
         full_paths = state["corrected_paths"]
     else:
-        hypothesis_json = state["messages"][-1]
-        hypothesis_dict = json.loads(hypothesis_json.content)
-        file_paths = hypothesis_dict["file_paths"]
+        hypothesis_dict = state["candidate_hypothesis"]
+        file_paths = hypothesis_dict["files_to_open"]
         full_paths = [os.path.join(root_path, path) for path in file_paths]
 
     invalid_paths= []

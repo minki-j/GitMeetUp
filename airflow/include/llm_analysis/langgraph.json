@@ -1,11 +1,13 @@
 {
   "python_version": "3.11",
-  "dockerfile_lines": [],
+  "dockerfile_lines": [
+    "RUN apt-get update && apt-get install -y git"
+  ],
   "dependencies": [
     "."
   ],
   "graphs": {
-    "main": "./main_graph.py:graph"
+    "main": "./main_graph.py:langgraph_app"
   },
   "env": "./.env"
 }

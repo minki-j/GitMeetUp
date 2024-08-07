@@ -14,7 +14,6 @@ from langchain_core.messages import (
 from ..state_schema import State
 
 from ..common import chat_model, output_parser
-from ..tools import tools
 
 from langchain_core.pydantic_v1 import BaseModel, Field
 from typing import List
@@ -26,22 +25,28 @@ class Hypothesis(BaseModel):
     """This is a Hypothesis of the repository. You must follow the order below when generating the properties
     1. rationale 2. hypothesis 3.queries_for_code_retrieval"""
 
-    rationale: str = Field(description="The reason for the hypothesis and the queries to retreive codes for confirmation")
+    rationale: str = Field(
+        description="The reason for the hypothesis and the queries to retreive codes for confirmation"
+    )
     hypothesis: str
     queries: List[str] = Field(
         description="A list of search queries used to retrieve relevant code snippets. These snippets will be used to verify the hypothesis. The retrieval process combines BM25 and embedding vector search techniques for improved accuracy. Order the queries from most imporant to least important. You can choose up to 3 queries."
     )
-    files_to_open: List[str] = Field(description="The list of file pathes from the directory tree that you need to open to confirm the hypothesis. You can choose up to 3 files.")
+    files_to_open: List[str] = Field(
+        description="The list of file pathes from the directory tree that you need to open to confirm the hypothesis. You can choose up to 3 files."
+    )
 
 
 def generate_hypothesis(state: State):
-    print("==>> hypothesis node started")
+    print("==>> generate_hypothesis node started")
+
+    print("hypothesis level: ", state["hypothesis_level"])
 
     system_message = SystemMessage(
         content="""
         You are a sesoned software engineer tasked to understand the provided repository. It includes meta data such as title, description, directory tree, and packages used. 
         Based on the information, make 1) a hypothesis about the project, 2) file pathes that you want to open to confirm the hypothesis based on the directory tree, and 3) queries that could be used to retrieve relevant code snippets to validate your hypothesis.
-        The queries are english sentences that describe functionality or patterns in the code that you need to look at to confirm the hypothesis. For example, if your hypothsis includes "this repo contains third partry authentications, then queries could be "code for third party authentication", "login with google" etc.
+        The queries are english sentences that describe functionality or patterns in the code that you need to look at to confirm the hypothesis. For example, if your hypothsis includes "this repo contains third party authentications, then queries could be "code for third party authentication", "login with google" etc.
         """
     )
 
@@ -55,22 +60,20 @@ def generate_hypothesis(state: State):
         """
     )
 
-    chain = (
-        lambda messages: [system_message, human_message] + messages
-    ) | chat_model.with_structured_output(Hypothesis)
+    prompt = ChatPromptTemplate.from_messages([system_message, human_message])
 
-    response = chain.invoke(state["messages"])
+    chain = prompt | chat_model.with_structured_output(Hypothesis)
+
+    response = chain.invoke({})
     response_dict = response.dict()
-    response_json = json.dumps(response_dict)
 
-    return {"messages": [AIMessage(content=response_json)]}
+    return {"candidate_hypothesis": response_dict}
 
 
 def evaluate_hypothesis(state: State):
-    print("==>> evaluation node started")
+    print("==>> evaluate_hypothesis node started")
 
-    hypothesis_json = state["messages"][-1]
-    hypothesis_dict = json.loads(hypothesis_json.content)
+    hypothesis_dict = state["candidate_hypothesis"]
 
     class Evaluation(BaseModel):
         """This is a result of the evaluation. You need to first provide the rationale of the result and then the modified_hypothesis."""
@@ -101,13 +104,13 @@ def evaluate_hypothesis(state: State):
     response = chain.invoke(
         {
             "hypothesis": hypothesis_dict["hypothesis"],
-            "retrieved_code_snippets": state["retrieved_code_snippets"][""],
+            "retrieved_code_snippets": state["retrieved_code_snippets"],
         }
     )
 
     result = response.dict()
     result["original_hypothesis"] = hypothesis_dict["hypothesis"]
     result["queries"] = hypothesis_dict["queries"]
-    result["opened_files"] = state["retrieved_code_snippets"]["sources"]
+    result["opened_files"] = state["opened_files"]
 
     return {"analysis_results": [result]}

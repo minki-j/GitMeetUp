@@ -16,23 +16,24 @@ from ..utils.semantic_splitter import semantic_code_splitter
 
 def retrieve_code_by_hybrid_search_with_queries(state: State):
     print("Retrieving code snippets for ", state["title"])
-    hypothesis_json = state["messages"][-1]
-    hypothesis_dict = json.loads(hypothesis_json.content)
+    hypothesis_dict = state["candidate_hypothesis"]
     queries = hypothesis_dict["queries"][:3]  #! only use top 3 queries for now
-
     if os.path.exists(f"./cache/documents/{state['title']}.pkl") and os.path.exists(
-        f"./cache/faiss_vectorstore/{state['title']}.pkl"
+        f"./cache/faiss_vectorstore/{state['title']}"
     ):
         print("Loading cached documents and embeddings")
         with open(f"./cache/documents/{state['title']}.pkl", "rb") as f:
             documents = pickle.load(f)
         embedding = OpenAIEmbeddings(model="text-embedding-3-large")
         faiss_vectorstore = FAISS.load_local(
-            f"./cache/faiss_vectorstore/{state['title']}.pkl",
+            f"./cache/faiss_vectorstore/{state['title']}",
             embedding,
             allow_dangerous_deserialization=True,
         )
     else:
+        print("Embedidngs does not exist")
+        print(f"./cache/documents/{state['title']}.pkl")
+        print(f"./cache/faiss_vectorstore/{state['title']}")
         documents = semantic_code_splitter(state["repo_root_path"])
 
         os.makedirs("./cache/documents", exist_ok=True)
@@ -43,7 +44,7 @@ def retrieve_code_by_hybrid_search_with_queries(state: State):
         embedding = OpenAIEmbeddings(model="text-embedding-3-large")
         faiss_vectorstore = FAISS.from_documents(documents, embedding)
 
-        faiss_vectorstore.save_local(f"./cache/faiss_vectorstore/{state['title']}.pkl")
+        faiss_vectorstore.save_local(f"./cache/faiss_vectorstore/{state['title']}")
 
     bm25_retriever = BM25Retriever.from_documents(documents)
     bm25_retriever.k = 2
@@ -66,10 +67,6 @@ def retrieve_code_by_hybrid_search_with_queries(state: State):
     ]
 
     return {
-        "retrieved_code_snippets": {
-            "sources": [
-                document.metadata["source"] for document in retrieved_code_snippets
-            ],
-            "content": "\n\n------------\n\n".join(formatted_snippets),
-        }
+        "retrieved_code_snippets": "\n\n------------\n\n".join(formatted_snippets),
+        "opened_files": [document.metadata["source"] for document in retrieved_code_snippets],
     }

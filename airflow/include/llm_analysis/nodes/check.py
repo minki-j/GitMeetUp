@@ -12,8 +12,9 @@ from langchain_core.messages import (
 )
 import json
 from ..common import chat_model, output_parser
+from .check import do_we_have_enough_hypotheses
 
-def do_we_need_more_retrieval(state: State) -> bool:
+def do_we_need_more_retrieval(state: State):
     class Enough(BaseModel):
 
         rationale: str = Field(
@@ -26,9 +27,8 @@ def do_we_need_more_retrieval(state: State) -> bool:
         You are a seasoned software engineer tasked to understand the provided repository. Before this step, you've already proposed a hypothesis about this repo and chosen files to look into to confirm your hypothesis. Now all the files are opened and collected for you. Examine if your hypothesis is coherent with the actual content of the files.
 
         Hypothesis: {hypothesis}
-
-        Files to refer:
-        {retrieved_code_snippets}
+        Directory tree: {directory_tree}
+        Opened files: {opened_files}
         """
     )
 
@@ -36,8 +36,10 @@ def do_we_need_more_retrieval(state: State) -> bool:
 
     response = chain.invoke(
         {
-            "hypothesis": hypothesis_dict["hypothesis"],
-            "retrieved_code_snippets": state["retrieved_code_snippets"],
+            "hypothesis": state["candidate_hypothesis"]["hypothesis"],
+            "opened_files": state["opened_files"]
+            + state["candidate_hypothesis"]["files_to_open"],
+            "directory_tree": state["directory_tree"],
         }
     )
 
@@ -52,3 +54,5 @@ def do_we_have_enough_hypotheses(state: State):
 
     if len(hypotheses) >= 5:
         return "__end__"
+    else:
+        n(do_we_have_enough_hypotheses)

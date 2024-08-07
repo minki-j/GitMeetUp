@@ -4,6 +4,7 @@ import json
 
 
 def read_files_suggested_by_LLM(state: State):
+    print("==>> read_files_suggested_by_LLM node started")
 
     root_path = state["repo_root_path"]
     valid_paths = state["valid_paths"]
@@ -19,5 +20,10 @@ def read_files_suggested_by_LLM(state: State):
 
         with open(full_path, "r") as f:
             opened_files[full_path.replace(root_path, "")] = f.read()
-
-    return {"opened_files": opened_files}
+    formatted_snippets = [
+        f"{path}:\n\n{content}" for path, content in opened_files.items()
+    ]
+    return {
+        "retrieved_code_snippets": "\n\n------------\n\n".join(formatted_snippets),
+        "opened_files": valid_paths,
+    }

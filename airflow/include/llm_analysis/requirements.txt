@@ -12,3 +12,4 @@ langchain_community
 scikit-learn
 rank_bm25
 faiss-cpu
+python-dotenv
