@@ -56,25 +56,37 @@ def generate_hypothesis(state: State):
     elif hypothesis_count in hypothesis_level_map[1]:
         system_message = SystemMessage(
             content=f"""
-            You are a seasoned software engineer tasked to understand the provided repository. In the previous step, you have created a highest level analysis of the repository. 
+            You are a seasoned software engineer tasked to understand the provided repository. 
+            In the previous step, you have created a highest level analysis of the repository. 
             Now, you need to create a hypothesis for more specific functionalities or patterns in the code. 
-            Make sure that your hypothesis is not too broad or general as the previous level.
+
+            Make sure that your hypothesis is more narrower and specific compared to those in the previous level.
+            Don't include the same phrases or patterns that are already in the previous level hypothesis. For example, you could just say "It includes" instead of "This repositories is about ... that includes ..."
             Make sure that your hypothesis is not overlapping with other hypothesis that are in the same level.
 
-            Previous level hypothesis: {", ".join([h["hypothesis"] for h in state["final_hypotheses"] if h["hypothesis_count"] in hypothesis_level_map[0]])}        
-            Same level other hypothesis: {", ".join([h["hypothesis"] for h in state["final_hypotheses"] if h["hypothesis_count"] in hypothesis_level_map[1]])}
+
+            Previous level hypothesis: 
+            {"\n".join([h["hypothesis"] for h in state["final_hypotheses"] if h["hypothesis_count"] in hypothesis_level_map[0]])}     
+
+
+            Same level other hypothesis: 
+            {"\n".join([h["hypothesis"] for h in state["final_hypotheses"] if h["hypothesis_count"] in hypothesis_level_map[1]])}
             """
         )
     else:
         raise ValueError(f"Invalid hypothesis count: {hypothesis_count}")
 
-    human_message = HumanMessage(
+    human_message = AIMessage(
         content=f"""
         Here are the meta data of the repository:
         Title: {state["title"]}
         Description: {state["repo_description_by_user"]}
         Packages used: {", ".join(state["packages_used"])}
         Directory Tree: {state["directory_tree"]}
+
+        Make sure that your hypothesis is more narrower and specific compared to those in the previous level.
+        Don't include the same phrases or patterns that are already in the previous level hypothesis. For example, you could just say "It includes" instead of "This repositories is about ... that includes ..."
+        Make sure that your hypothesis is not overlapping with other hypothesis that are in the same level.
         """
     )
 

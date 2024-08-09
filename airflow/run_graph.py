@@ -309,4 +309,4 @@ result = langgraph_app.invoke(
 )
 
 with open("hypothesis_result.txt", "w") as f:
-    f.write("\n".join([x["hypothesis"] for x in result["final_hypotheses"]]))
+    f.write("\n\n-----------\n\n".join([x["hypothesis"] for x in result["final_hypotheses"]]))
