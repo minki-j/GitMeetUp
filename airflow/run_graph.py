@@ -1,12 +1,21 @@
 from dotenv import load_dotenv
-load_dotenv(dotenv_path='./.env')
+
+load_dotenv(dotenv_path="./.env")
 
 from include.llm_analysis.main_graph import langgraph_app
+
 result = langgraph_app.invoke(
     {
         "title": "Ernest",
         "repo_root_path": "/Users/minkijung/Documents/2PetProjects/ernest/backend/",
         "repo_description": "An AI-Powered Review Platform That Gathers Information Through Conversations",
+        "clone_url": "https://github.com/minki-j/GitMeetUp.git",
+        "steps": [],
+        "analysis_results": [],
+        "final_hypotheses": [],
+        "validate_count": 0,
+        "retrieval_count": 0,
+        "hypothesis_count": 0,
         "packages_used": [
             "datasets",
             "fastapi",
@@ -295,14 +304,9 @@ result = langgraph_app.invoke(
 ├── readme.md
 ├── requirements.txt
 """,
-        "steps": [],
-        "analysis_results": [],
-        "final_hypotheses": [],
-        "validate_count": 0,
-        "clone_url": "https://github.com/minki-j/GitMeetUp.git",
     },
     {"recursion_limit": 100},
 )
 
 with open("hypothesis_result.txt", "w") as f:
-    f.write("\n".join(result["final_hypotheses"]))
+    f.write("\n".join([x["hypothesis"] for x in result["final_hypotheses"]]))

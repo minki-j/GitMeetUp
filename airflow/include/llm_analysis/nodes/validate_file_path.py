@@ -17,6 +17,13 @@ def validate_file_paths_from_LLM(state: State):
     else:
         hypothesis_dict = state["candidate_hypothesis"]
         file_paths = hypothesis_dict["files_to_open"]
+        if len(file_paths) == 0:
+            print("No file paths to validate")
+            return {
+                "invalid_paths": [],
+                "valid_paths": [],
+                "validate_count": state["validate_count"] + 1,
+            }
         full_paths = [os.path.join(root_path, path) for path in file_paths]
 
     invalid_paths= []

@@ -1,58 +1,38 @@
 from varname import nameof as n
-from ..state_schema import State
+from difflib import SequenceMatcher
+
 from langchain_core.pydantic_v1 import BaseModel, Field
+from langchain_core.prompts import ChatPromptTemplate
 
-from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
-from langchain_core.messages import (
-    AIMessage,
-    BaseMessage,
-    FunctionMessage,
-    SystemMessage,
-    HumanMessage,
-)
-import json
-from ..common import chat_model, output_parser
-from .check import do_we_have_enough_hypotheses
+from ..common import chat_model
+from ..state_schema import State
 
+from ..subgraphs.retrieval.graph import subGraph_retrieval
+from .hypothesis import generate_hypothesis
+
+# We are NOT going to use LLM here because judging whether something is enough or not is a subjective and resource-dependent task. LLMs are not suitable for this type of task.
 def do_we_need_more_retrieval(state: State):
-    class Enough(BaseModel):
+    print("==> do_we_need_more_retrieval")
 
-        rationale: str = Field(
-            description="Think out loud if the hypothesis needs more examination or if it's enough to add to the final report for this repository.",
-        )
-        is_enough: bool
-
-    prompt = ChatPromptTemplate.from_template(
-        """
-        You are a seasoned software engineer tasked to understand the provided repository. Before this step, you've already proposed a hypothesis about this repo and chosen files to look into to confirm your hypothesis. Now all the files are opened and collected for you. Examine if your hypothesis is coherent with the actual content of the files.
-
-        Hypothesis: {hypothesis}
-        Directory tree: {directory_tree}
-        Opened files: {opened_files}
-        """
-    )
-
-    chain = prompt | chat_model.with_structured_output(Enough)
-
-    response = chain.invoke(
-        {
-            "hypothesis": state["candidate_hypothesis"]["hypothesis"],
-            "opened_files": state["opened_files"]
-            + state["candidate_hypothesis"]["files_to_open"],
-            "directory_tree": state["directory_tree"],
-        }
-    )
-
-    if response.is_enough:
-        return n(do_we_have_enough_hypotheses)
+    # If the last hypothesis is the same as the original hypothesis, stop rerieval
+    # Used SequenceMatcher to allow some flexibility
+    if len(state["analysis_results"]) > 0:
+        modified_hypotheses = state["analysis_results"][-1]["modified_hypothesis"]
+        original_hypothesis = state["analysis_results"][-1]["original_hypothesis"]
+        if SequenceMatcher(None, modified_hypotheses, original_hypothesis).ratio() > 0.8:
+            return "put_candidate_as_final_hypothesis"
+        
+    if state["retrieval_count"] >= 3:
+        return "put_candidate_as_final_hypothesis"
     else:
-        return 
+        return n(subGraph_retrieval)
+
 
 def do_we_have_enough_hypotheses(state: State):
     hypotheses = state["final_hypotheses"]
     print(f"collected {len(hypotheses)} hypotheses so far")
 
-    if len(hypotheses) >= 5:
+    if len(hypotheses) >= 4:
         return "__end__"
     else:
-        n(do_we_have_enough_hypotheses)
+        return n(generate_hypothesis)

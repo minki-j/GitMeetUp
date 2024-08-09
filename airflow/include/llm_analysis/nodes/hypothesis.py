@@ -17,13 +17,11 @@ from ..common import chat_model, output_parser
 
 from langchain_core.pydantic_v1 import BaseModel, Field
 from typing import List
-from langchain_core.tools import tool
-from langchain_core.runnables import Runnable, RunnableConfig, RunnableLambda
 
 
 class Hypothesis(BaseModel):
     """This is a Hypothesis of the repository. You must follow the order below when generating the properties
-    1. rationale 2. hypothesis 3.queries_for_code_retrieval"""
+    1. rationale 2. hypothesis 3.queries_for_code_retrieval 4.files_to_open"""
 
     rationale: str = Field(
         description="The reason for the hypothesis and the queries to retreive codes for confirmation"
@@ -39,16 +37,36 @@ class Hypothesis(BaseModel):
 
 def generate_hypothesis(state: State):
     print("==>> generate_hypothesis node started")
+    hypothesis_count = state["hypothesis_count"]
 
-    print("hypothesis level: ", state["hypothesis_level"])
+    hypothesis_level_map = {
+        0: [0],
+        1: [1, 2, 3],
+        2: [4, 5, 6, 7, 8, 9],
+    }
 
-    system_message = SystemMessage(
-        content="""
-        You are a sesoned software engineer tasked to understand the provided repository. It includes meta data such as title, description, directory tree, and packages used. 
-        Based on the information, make 1) a hypothesis about the project, 2) file pathes that you want to open to confirm the hypothesis based on the directory tree, and 3) queries that could be used to retrieve relevant code snippets to validate your hypothesis.
-        The queries are english sentences that describe functionality or patterns in the code that you need to look at to confirm the hypothesis. For example, if your hypothsis includes "this repo contains third party authentications, then queries could be "code for third party authentication", "login with google" etc.
-        """
-    )
+    if hypothesis_count in hypothesis_level_map[0]:
+        system_message = SystemMessage(
+            content="""
+            You are a sesoned software engineer tasked to understand the provided repository. It includes meta data such as title, description, directory tree, and packages used. 
+            Based on the information, make 1) a hypothesis about the project, 2) file pathes that you want to open to confirm the hypothesis based on the directory tree, and 3) queries that could be used to retrieve relevant code snippets to validate your hypothesis.
+            The queries are english sentences that describe functionality or patterns in the code that you need to look at to confirm the hypothesis. For example, if your hypothsis includes "this repo contains third party authentications, then queries could be "code for third party authentication", "login with google" etc.
+            """
+        )
+    elif hypothesis_count in hypothesis_level_map[1]:
+        system_message = SystemMessage(
+            content=f"""
+            You are a seasoned software engineer tasked to understand the provided repository. In the previous step, you have created a highest level analysis of the repository. 
+            Now, you need to create a hypothesis for more specific functionalities or patterns in the code. 
+            Make sure that your hypothesis is not too broad or general as the previous level.
+            Make sure that your hypothesis is not overlapping with other hypothesis that are in the same level.
+
+            Previous level hypothesis: {", ".join([h["hypothesis"] for h in state["final_hypotheses"] if h["hypothesis_count"] in hypothesis_level_map[0]])}        
+            Same level other hypothesis: {", ".join([h["hypothesis"] for h in state["final_hypotheses"] if h["hypothesis_count"] in hypothesis_level_map[1]])}
+            """
+        )
+    else:
+        raise ValueError(f"Invalid hypothesis count: {hypothesis_count}")
 
     human_message = HumanMessage(
         content=f"""
@@ -90,7 +108,9 @@ def evaluate_hypothesis(state: State):
 
     prompt = ChatPromptTemplate.from_template(
         """
-        You are a seasoned software engineer tasked to understand the provided repository. Before this step, you've already proposed a hypothesis about this repo and chosen files to look into to confirm your hypothesis. Now all the files are opened and collected for you. Examine if your hypothesis is coherent with the actual content of the files. If the opened files doesn't contain the information you need, you can request to open more files.
+        You are a seasoned software engineer tasked to understand the provided repository. In the previous step, you've already proposed a hypothesis about this repo and chosen files to look into to confirm your hypothesis. 
+        Now all the files are opened and collected for you. Examine if your hypothesis is coherent with the actual content of the files. 
+        If the opened files doesn't contain the information you need, you can request to open more files.
 
         Hypothesis: {hypothesis}
 
@@ -112,5 +132,14 @@ def evaluate_hypothesis(state: State):
     result["original_hypothesis"] = hypothesis_dict["hypothesis"]
     result["queries"] = hypothesis_dict["queries"]
     result["opened_files"] = state["opened_files"]
+    result["hypothesis_count"] = state["hypothesis_count"]
 
-    return {"analysis_results": [result]}
+    candidate_hypothesis = {
+        "rationale": result["rationale"],
+        "hypothesis": result["modified_hypothesis"],
+        "queries": result["queries"],
+        "files_to_open": [],
+        "hypothesis_count": state["hypothesis_count"],
+    }
+
+    return {"analysis_results": [result], "candidate_hypothesis": candidate_hypothesis}

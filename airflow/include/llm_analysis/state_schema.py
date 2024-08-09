@@ -13,6 +13,9 @@ class State(TypedDict):
 
     @staticmethod
     def concat_strings(attribute_instance: str, new_result: str) -> str:
+        if new_result == "RESET":
+            print("Reset retrieved_code_snippets")
+            return ""
         return attribute_instance + "\n\n" + new_result
 
     title: str
@@ -29,18 +32,12 @@ class State(TypedDict):
     corrected_paths: List[str] = []
     validate_count: int = 0
 
-    candidate_hypothesis: str
+    candidate_hypothesis: dict
     analysis_results: Annotated[List[dict], merge_lists] = []
-    final_hypotheses: Annotated[List[str], merge_lists] = []
+    final_hypotheses: Annotated[List[dict], merge_lists] = []
 
     retrieved_code_snippets: Annotated[str, concat_strings] = ""
     opened_files: Annotated[List[str], merge_lists] = []
+    retrieval_count: int = 0
 
-    hypothesis_level: int = 0
-
-    def __init__(self):
-        self.analysis_results = []
-        self.valid_paths = []
-        self.corrected_paths = []
-        self.invalid_paths = []
-        self.hypothesis_level = 0
+    hypothesis_count: int = 0
