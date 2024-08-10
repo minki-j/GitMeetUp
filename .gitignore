@@ -13,3 +13,4 @@ webserver_config.py
 airflow.cfg
 airflow.db
 cache/
+cloned_repositories/

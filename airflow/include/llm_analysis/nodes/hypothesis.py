@@ -126,7 +126,7 @@ def evaluate_hypothesis(state: State):
 
         Hypothesis: {hypothesis}
 
-        Files to refer:
+        Files to refer(total: {number_of_retrieved_code}):
         {retrieved_code_snippets}
         """
     )
@@ -136,6 +136,7 @@ def evaluate_hypothesis(state: State):
     response = chain.invoke(
         {
             "hypothesis": hypothesis_dict["hypothesis"],
+            "number_of_retrieved_code" : len(state["retrieved_code_snippets"]),
             "retrieved_code_snippets": state["retrieved_code_snippets"],
         }
     )

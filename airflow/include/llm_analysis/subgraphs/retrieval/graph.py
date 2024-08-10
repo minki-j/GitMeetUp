@@ -14,7 +14,9 @@ from ...nodes.validate_file_path import (
 from ...nodes.retrieve_code_snippets import retrieve_code_by_hybrid_search_with_queries
 
 g = StateGraph(State)
-g.add_node("entry", lambda state: {"retrieved_code_snippets": "RESET"})
+g.add_node(
+    "entry", lambda state: {"retrieved_code_snippets": "RESET", "valid_paths": "RESET"}
+)
 g.set_entry_point("entry")
 g.add_edge("entry", n(retrieve_code_by_hybrid_search_with_queries))
 g.add_edge("entry", n(validate_file_paths_from_LLM))

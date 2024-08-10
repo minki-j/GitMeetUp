@@ -6,6 +6,9 @@ from langchain_core.messages import BaseMessage
 class State(TypedDict):
     @staticmethod
     def merge_lists(attribute_instance: List, new_result: List) -> List:
+        if new_result == "RESET":
+            # print("\n-----------------\nReset for merge_lists")
+            return []
         for item in new_result:
             if item not in attribute_instance:
                 attribute_instance.append(item)
@@ -14,7 +17,7 @@ class State(TypedDict):
     @staticmethod
     def concat_strings(attribute_instance: str, new_result: str) -> str:
         if new_result == "RESET":
-            print("Reset retrieved_code_snippets")
+            # print("\n-----------------\nReset for concat_strings")
             return ""
         return attribute_instance + "\n\n" + new_result
 

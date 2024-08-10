@@ -46,7 +46,7 @@ env = os.environ
 # )
 chat_model = ChatAnthropic(
     model="claude-3-5-sonnet-20240620", api_key=os.getenv("ANTHROPIC_API_KEY")
-).with_fallbacks([ChatOpenAI(model="gpt-4o-mini")])
+).with_fallbacks([ChatOpenAI(model="gpt-4o")])
 
 # chat_model = ChatAnthropic(
 #     model="claude-3-5-sonnet-20240620", api_key=Variable.get("ANTHROPIC_API_KEY")
