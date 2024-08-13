@@ -9,9 +9,9 @@ from include.github_api_call.functions import fetch_commits
 from include.github_api_call.request import github_api_request
 from include.utils.generate_tree import generate_tree
 
-from include.llm_analysis.main_graph import langgraph_app
+from include.generate_readme.main_graph import langgraph_app
 
-CLONE_URL = "https://github.com/sagnikghoshcr7/AI-Enabled-B2B-FINTECH-Management.git"
+CLONE_URL = "https://github.com/minki-j/GitMeetup.git"
 
 def get_repo_info(clone_url):
     repo_info = {}
@@ -103,10 +103,11 @@ result = langgraph_app.invoke(
     {"recursion_limit": 100},
 )
 
+os.makedirs("./cache/results", exist_ok=True)
 with open(f"./cache/results/{repo_info["title"]}.txt", "w") as f:
-    f.write(f"LLM's analysis of {repo_info['title']}\nRepo URL: {repo_info['clone_url']}\n\n")
+    f.write(f"LLM's analysis of {repo_info['title']}\nRepo URL: {repo_info['clone_url']}\n\n\n")
     f.write(
-        "\n-----------\n".join(
+        "\n\n-----------\n\n".join(
             [x["hypothesis"] for x in result["final_hypotheses"]]
         )
     )

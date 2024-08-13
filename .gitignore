@@ -12,3 +12,5 @@ airflow.cfg
 airflow.db
 
 cache/
+cache2/
+scratchpad.ipynb

@@ -16,7 +16,7 @@ def semantic_code_splitter(root_path, embedding_max_length=8191):
     document_path = root_path
     loader = DirectoryLoader(
         document_path,
-        glob=["*.md", "*.py", "*.ts", "*.js", "*.tsx", "*.jsx"],
+        glob=["*.py"],  # "*.md", "*.ts", "*.js", "*.tsx", "*.jsx"
         loader_cls=TextLoader,
         recursive=True,
     )
@@ -34,10 +34,11 @@ def semantic_code_splitter(root_path, embedding_max_length=8191):
         keep_separator=True,
         strip_whitespace=False,
     )
+    print(f"Splitting {len(documents)} documents...")
     documents = python_splitter.split_documents(documents)
 
     openAIEmbedding = OpenAIEmbeddings(model="text-embedding-3-large")
-    print(f"Embedding {len(documents)} documents for semantic splitter...")
+    print(f"Embedding {len(documents)} split documents...")
     embeddings = openAIEmbedding.embed_documents(
         [document.page_content for document in documents]
     )

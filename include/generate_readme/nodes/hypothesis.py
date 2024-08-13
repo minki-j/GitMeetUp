@@ -13,7 +13,7 @@ from langchain_core.messages import (
 )
 from ..state_schema import State
 
-from ..common import chat_model, output_parser
+from ..common import chat_model
 
 from langchain_core.pydantic_v1 import BaseModel, Field
 from typing import List

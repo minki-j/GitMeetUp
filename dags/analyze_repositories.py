@@ -22,7 +22,7 @@ from include.utils.sql_functions import (
     insert_document,
 )
 from include.github_api_call.request import github_api_request
-from include.llm_analysis.main_graph import langgraph_app
+from include.generate_readme.main_graph import langgraph_app
 from include.utils.convert_column_names import convert_postgres_to_state_schema
 
 

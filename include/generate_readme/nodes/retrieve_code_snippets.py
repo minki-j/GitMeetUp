@@ -55,7 +55,7 @@ def retrieve_code_by_hybrid_search_with_queries(state: State):
         retrievers=[bm25_retriever, faiss_retriever], weights=[0.5, 0.5]
     )
     retrieved_code_snippets = []
-    for query in queries:
+    for query in queries: #TODO parallelize this
         result = ensemble_retriever.invoke(query)
         retrieved_code_snippets.extend(result)
 

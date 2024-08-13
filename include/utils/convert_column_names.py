@@ -1,4 +1,4 @@
-from include.llm_analysis.state_schema import State
+from include.generate_readme.state_schema import State
 from typing import List
 import json
 
