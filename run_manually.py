@@ -11,7 +11,7 @@ from include.utils.generate_tree import generate_tree
 
 from include.generate_readme.main_graph import langgraph_app
 
-CLONE_URL = "https://github.com/minki-j/GitMeetup.git"
+CLONE_URL = "https://github.com/minki-j/AI_README_Generator.git"
 
 def get_repo_info(clone_url):
     repo_info = {}
@@ -93,12 +93,14 @@ repo_info = get_repo_info(CLONE_URL)
 result = langgraph_app.invoke(
     {
         **repo_info,
+        "repo_description_by_user": "",
         "steps": [],
         "analysis_results": [],
         "final_hypotheses": [],
         "validate_count": 0,
         "retrieval_count": 0,
         "hypothesis_count": 0,
+        "corrected_paths": [],
     },
     {"recursion_limit": 100},
 )
