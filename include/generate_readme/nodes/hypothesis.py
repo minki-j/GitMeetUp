@@ -81,7 +81,7 @@ def generate_hypothesis(state: State):
         Here are the meta data of the repository:
         Title: {state["title"]}
         Description: {state["repo_description_by_user"]}
-        Packages used: {", ".join(state["packages_used"])}
+        Packages used: {", ".join(state["packages_used"]) if type(state["packages_used"]) == list else state["packages_used"]}
         Directory Tree: {state["directory_tree"]}
 
         Make sure that your hypothesis is more narrower and specific compared to those in the previous level.
